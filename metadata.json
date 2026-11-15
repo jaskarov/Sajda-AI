@@ -1,0 +1,6 @@
+{
+  "name": "Sajda AI",
+  "description": "AI-ustoz (Interactive Pose-Guided Prayer Coach) bilan real vaqtda kamera va audio orqali namoz o'rganish, O'zbekiston taqvimi va Qibla kompasi ilovasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
