@@ -1,58 +1,61 @@
 package com.example.alarm
 
 import android.content.Context
-import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.data.local.PrayerCalendarDayEntity
 import com.example.data.preferences.UserSettings
 import com.example.domain.engine.GetPrayerTimesUseCase
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.PrayerTimeSlot
 import com.example.domain.model.PrayerType
-import com.example.domain.model.TextScript
 import com.example.domain.model.UzbekCity
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 
 /**
- * Schedules and manages WorkManager background tasks for the five daily prayers
- * (Bomdod, Peshin, Asr, Shom, Xufton) using O'zbekiston prayer times.
+ * Coordinates exact AlarmManager reminders (Bomdod, Peshin, Asr, Shom, Xufton)
+ * with periodic WorkManager daily calendar sync so notifications arrive on time
+ * without duplicate alerts.
  */
 class PrayerWorkScheduler(
     private val context: Context,
     private val workManager: WorkManager = WorkManager.getInstance(context),
-    private val getPrayerTimesUseCase: GetPrayerTimesUseCase = GetPrayerTimesUseCase()
+    private val getPrayerTimesUseCase: GetPrayerTimesUseCase = GetPrayerTimesUseCase(),
+    private val alarmScheduler: PrayerAlarmScheduler = PrayerAlarmScheduler(context)
 ) {
-
-    private val legacyAlarmScheduler by lazy { PrayerAlarmScheduler(context) }
 
     fun syncAllPrayers(
         settings: UserSettings,
         nowMillis: Long = System.currentTimeMillis(),
-        ensurePeriodicSync: Boolean = true
+        ensurePeriodicSync: Boolean = true,
+        todayCalendarDay: PrayerCalendarDayEntity? = null,
+        tomorrowCalendarDay: PrayerCalendarDayEntity? = null
     ) {
         val city = UzbekistanCities.findById(settings.selectedCityId)
         val todaySummary = getPrayerTimesUseCase.calculateForToday(
             city = city,
             completedToday = emptySet(),
             alarmMap = settings.alarmMap,
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            todayCalendarDay = todayCalendarDay,
+            tomorrowCalendarDay = tomorrowCalendarDay
         )
 
         todaySummary.slots
             .filter { it.type.isPrayable }
             .forEach { slot ->
-                // Clear any legacy AlarmManager alarms to prevent duplicate notifications
-                legacyAlarmScheduler.cancelSlot(slot.type)
+                // Ensure no legacy duplicate WorkManager notification job remains active
+                workManager.cancelUniqueWork(uniqueWorkName(slot.type))
 
                 if (slot.alarmEnabled) {
                     scheduleNextOccurrence(
                         prayerType = slot.type,
                         settings = settings,
-                        nowMillis = nowMillis
+                        nowMillis = nowMillis,
+                        todayCalendarDay = todayCalendarDay,
+                        tomorrowCalendarDay = tomorrowCalendarDay
                     )
                 } else {
                     cancelPrayer(slot.type)
@@ -67,9 +70,13 @@ class PrayerWorkScheduler(
     fun scheduleNextOccurrence(
         prayerType: PrayerType,
         settings: UserSettings,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        todayCalendarDay: PrayerCalendarDayEntity? = null,
+        tomorrowCalendarDay: PrayerCalendarDayEntity? = null
     ) {
         if (!prayerType.isPrayable) return
+        workManager.cancelUniqueWork(uniqueWorkName(prayerType))
+
         if (settings.alarmMap[prayerType] == false) {
             cancelPrayer(prayerType)
             return
@@ -81,39 +88,25 @@ class PrayerWorkScheduler(
             prayerType = prayerType,
             city = city,
             alarmMap = settings.alarmMap,
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            todayCalendarDay = todayCalendarDay,
+            tomorrowCalendarDay = tomorrowCalendarDay
         ) ?: return
 
         val (slot, triggerMillis) = nextSlotAndTrigger
-        val delayMillis = (triggerMillis - nowMillis).coerceAtLeast(0L)
 
-        val inputData = Data.Builder()
-            .putString(PrayerNotificationWorker.KEY_PRAYER_TYPE_ID, prayerType.id)
-            .putString(PrayerNotificationWorker.KEY_PRAYER_NAME, prayerType.title.get(script))
-            .putString(PrayerNotificationWorker.KEY_PRAYER_TIME, slot.timeFormatted)
-            .putString(PrayerNotificationWorker.KEY_CITY_NAME, city.name.get(script))
-            .putInt(
-                PrayerNotificationWorker.KEY_NOTIFICATION_ID,
-                PrayerNotificationWorker.NOTIFICATION_ID_BASE + prayerType.ordinal
-            )
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<PrayerNotificationWorker>()
-            .setInitialDelay(delayMillis, TimeUnit.MILLISECONDS)
-            .setInputData(inputData)
-            .addTag(TAG_PRAYER_NOTIFICATION)
-            .addTag(tagForPrayer(prayerType))
-            .build()
-
-        workManager.enqueueUniqueWork(
-            uniqueWorkName(prayerType),
-            ExistingWorkPolicy.REPLACE,
-            request
+        alarmScheduler.scheduleExactPrayer(
+            type = prayerType,
+            triggerMillis = triggerMillis,
+            prayerName = prayerType.title.get(script),
+            prayerTime = slot.timeFormatted,
+            cityName = city.name.get(script),
+            script = script
         )
     }
 
     fun cancelPrayer(type: PrayerType) {
-        legacyAlarmScheduler.cancelSlot(type)
+        alarmScheduler.cancelSlot(type)
         workManager.cancelUniqueWork(uniqueWorkName(type))
     }
 
@@ -136,13 +129,17 @@ class PrayerWorkScheduler(
         prayerType: PrayerType,
         city: UzbekCity,
         alarmMap: Map<PrayerType, Boolean>,
-        nowMillis: Long
+        nowMillis: Long,
+        todayCalendarDay: PrayerCalendarDayEntity? = null,
+        tomorrowCalendarDay: PrayerCalendarDayEntity? = null
     ): Pair<PrayerTimeSlot, Long>? {
         val todaySummary = getPrayerTimesUseCase.calculateForToday(
             city = city,
             completedToday = emptySet(),
             alarmMap = alarmMap,
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            todayCalendarDay = todayCalendarDay,
+            tomorrowCalendarDay = tomorrowCalendarDay
         )
         val todaySlot = todaySummary.slots.firstOrNull { it.type == prayerType } ?: return null
         val todayTrigger = triggerMillisForDay(nowMillis, todaySlot, addDays = 0)
@@ -155,7 +152,9 @@ class PrayerWorkScheduler(
             city = city,
             completedToday = emptySet(),
             alarmMap = alarmMap,
-            nowMillis = tomorrowMillis
+            nowMillis = tomorrowMillis,
+            todayCalendarDay = tomorrowCalendarDay,
+            tomorrowCalendarDay = null
         )
         val tomorrowSlot = tomorrowSummary.slots.firstOrNull { it.type == prayerType }
             ?: todaySlot

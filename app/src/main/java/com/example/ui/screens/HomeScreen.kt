@@ -121,8 +121,8 @@ fun HomeScreen(
                 .fillMaxSize()
                 .widthIn(max = 600.dp)
                 .align(Alignment.TopCenter),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Top Header: Location & Settings
             item {
@@ -209,24 +209,24 @@ fun HomeScreen(
                     }
 
                     Column(
-                        modifier = Modifier.padding(22.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
                             text = "${
                                 lText("KEYINGI NAMOZ:", "КЕЙИНГИ НАМОЗ:").get(script)
-                            } ${schedule.nextPrayer.title.get(script).uppercase()}",
+                            } ${schedule.nextPrayer.title.get(script).uppercase()} (${schedule.nextPrayerTimeFormatted})",
                             style = MaterialTheme.typography.labelLarge,
                             color = Color(0xFFFFE5A3),
-                            letterSpacing = 1.sp
+                            letterSpacing = 0.8.sp
                         )
 
                         Text(
                             text = formatCountdown(schedule.countdownSeconds),
                             fontFamily = JetBrainsMonoFontFamily,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 38.sp,
+                            fontSize = 32.sp,
                             color = Color.White
                         )
 
@@ -237,19 +237,17 @@ fun HomeScreen(
                                     "Ҳозирги вақт: ${schedule.currentPrayer.title.cyrillic}"
                                 ).get(script)
                             }",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.82f)
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.84f)
                         )
-
-                        Spacer(Modifier.height(4.dp))
 
                         Button(
                             onClick = { onStartPrayer(selectedTrack) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(56.dp)
+                                .height(48.dp)
                                 .testTag("start_current_prayer_button"),
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = SaffronGold,
                                 contentColor = Color(0xFF1B1400)
@@ -258,7 +256,7 @@ fun HomeScreen(
                             Icon(
                                 imageVector = Icons.Default.PlayArrow,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -445,7 +443,7 @@ private fun PrayerTimeSlotRow(
     }
 
     Card(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         border = BorderStroke(if (slot.isCurrent) 1.5.dp else 1.dp, borderColor),
         modifier = Modifier
@@ -456,7 +454,7 @@ private fun PrayerTimeSlotRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(

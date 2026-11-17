@@ -1,11 +1,6 @@
 package com.example.ui.screens
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,17 +15,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -43,21 +41,17 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.Gender
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
 import com.example.ui.viewmodel.MainUiState
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -67,33 +61,18 @@ fun SettingsScreen(
     onGenderChange: (Gender) -> Unit,
     onScriptChange: (TextScript) -> Unit,
     onCityChange: (String) -> Unit,
-    onGeminiTtsToggle: (Boolean) -> Unit,
+    onPreferOfflineMp3Toggle: (Boolean) -> Unit,
     onVoiceSpeedChange: (Float) -> Unit,
     onDarkThresholdChange: (Float) -> Unit,
+    onSyncCalendarNow: () -> Unit = {},
+    onOpenPermissions: () -> Unit = {},
+    onTestAudio: () -> Unit = {},
     onBack: () -> Unit
 ) {
     BackHandler(onBack = onBack)
 
-    val context = LocalContext.current
     val settings = uiState.settings
     val script = settings.script
-
-    var notifGranted by remember {
-        mutableStateOf(
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                ContextCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-            } else true
-        )
-    }
-
-    val notifLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        notifGranted = granted
-    }
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -180,7 +159,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Gemini TTS & Audio Coach Settings
+                // Offline Audio Coach (Bundled Qori MP3s via ExoPlayer + TTS)
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -191,7 +170,10 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = lText("AI Ovozli Ustoz", "AI Овозли Устоз").get(script),
+                            text = lText(
+                                "Oflayn Qori va Ovozli Ustoz",
+                                "Офлайн Қори ва Овозли Устоз"
+                            ).get(script),
                             style = MaterialTheme.typography.titleMedium
                         )
                         Row(
@@ -201,22 +183,39 @@ fun SettingsScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Gemini TTS (gemini-3.8-flash-tts)",
+                                    text = lText(
+                                        "Oflayn Qori MP3 (ExoPlayer)",
+                                        "Офлайн Қори MP3 (ExoPlayer)"
+                                    ).get(script),
                                     style = MaterialTheme.typography.bodyLarge
                                 )
                                 Text(
                                     text = lText(
-                                        "Tabiiy ovozda suralar va ko‘rsatmalarni o‘qish",
-                                        "Табиий овозда суралар ва кўрсатмаларни ўқиш"
+                                        "15 ta sura, duo va tasbeh MP3 fayllari ilova ichida saqlangan va internetsiz ijro etiladi.",
+                                        "15 та сура, дуо ва тасбеҳ MP3 файллари илова ичида сақланган ва интернетсиз ижро этилади."
                                     ).get(script),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = settings.useGeminiTts,
-                                onCheckedChange = onGeminiTtsToggle,
-                                modifier = Modifier.testTag("settings_gemini_tts_switch")
+                                checked = settings.preferOfflineMp3,
+                                onCheckedChange = onPreferOfflineMp3Toggle,
+                                modifier = Modifier.testTag("settings_offline_mp3_switch")
+                            )
+                        }
+
+                        FilledTonalButton(
+                            onClick = onTestAudio,
+                            modifier = Modifier.testTag("settings_test_audio_button")
+                        ) {
+                            Icon(Icons.Default.VolumeUp, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                lText(
+                                    "Qiroatni sinab ko‘rish (Fotiha)",
+                                    "Қироатни синаб кўриш (Фотиҳа)"
+                                ).get(script)
                             )
                         }
 
@@ -249,7 +248,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // City Picker
+                // 365-Day Calendar DB & Online Sync + City Picker
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -260,9 +259,33 @@ fun SettingsScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = lText("Shahar", "Шаҳар").get(script),
+                            text = lText(
+                                "Hudud va 365 kunlik taqvim",
+                                "Ҳудуд ва 365 кунлик тақвим"
+                            ).get(script),
                             style = MaterialTheme.typography.titleMedium
                         )
+                        val sourceLabel = if (uiState.calendarSource == "aladhan_online" &&
+                            uiState.lastCalendarSyncMillis > 0L
+                        ) {
+                            val timeStr = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+                                .format(Date(uiState.lastCalendarSyncMillis))
+                            lText(
+                                "Manba: Onlayn sinxronlangan ($timeStr) • 14 hudud",
+                                "Манба: Онлайн синхронланган ($timeStr) • 14 ҳудуд"
+                            ).get(script)
+                        } else {
+                            lText(
+                                "Manba: 365 kunlik oflayn Room bazasi • 14 hudud",
+                                "Манба: 365 кунлик офлайн Room базаси • 14 ҳудуд"
+                            ).get(script)
+                        }
+                        Text(
+                            text = sourceLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -275,24 +298,48 @@ fun SettingsScreen(
                                 )
                             }
                         }
+
+                        FilledTonalButton(
+                            onClick = onSyncCalendarNow,
+                            enabled = !uiState.isCalendarSyncing,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("settings_sync_calendar_button")
+                        ) {
+                            if (uiState.isCalendarSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Sync, contentDescription = null)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                lText(
+                                    "Taqvimni internet orqali yangilash",
+                                    "Тақвимни интернет орқали янгилаш"
+                                ).get(script)
+                            )
+                        }
                     }
                 }
 
-                // Notification Permission
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifGranted) {
-                    FilledTonalButton(
-                        onClick = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Notifications, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            lText(
-                                "Namoz vaqti bildirishnomalariga ruxsat berish",
-                                "Намоз вақти билдиришномаларига рухсат бериш"
-                            ).get(script)
-                        )
-                    }
+                // Runtime Permissions Center (Camera, Notifications, Exact Alarm)
+                FilledTonalButton(
+                    onClick = onOpenPermissions,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_open_permissions_button")
+                ) {
+                    Icon(Icons.Default.Security, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        lText(
+                            "Ruxsatlar: Kamera, Bildirishnoma va Aniq Azon",
+                            "Рухсатлар: Камера, Билдиришнома ва Аниқ Азон"
+                        ).get(script)
+                    )
                 }
             }
         }

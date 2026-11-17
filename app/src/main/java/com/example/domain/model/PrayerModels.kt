@@ -157,6 +157,7 @@ data class PrayerTimeSlot(
 data class PrayerScheduleSummary(
     val city: UzbekCity,
     val nextPrayer: PrayerType,
+    val nextPrayerTimeFormatted: String,
     val currentPrayer: PrayerType,
     val countdownSeconds: Long,
     val slots: List<PrayerTimeSlot>,
@@ -178,7 +179,8 @@ data class PrayerStep(
     val coachInstruction: LText,
     val ttsPrompt: String,
     val minHoldDurationMs: Long,
-    val requiresPoseTransition: Boolean = true
+    val requiresPoseTransition: Boolean = true,
+    val audioAssetId: String = ""
 ) {
     fun getWords(script: TextScript): List<String> {
         val text = when (script) {
@@ -223,7 +225,8 @@ data class SurahLibraryItem(
     val translitLatin: String,
     val translitCyrillic: String,
     val meaning: LText,
-    val ttsPrompt: String
+    val ttsPrompt: String,
+    val audioAssetId: String = id
 )
 
 data class PostureGuideItem(

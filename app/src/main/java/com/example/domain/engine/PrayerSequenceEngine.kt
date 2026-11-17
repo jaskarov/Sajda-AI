@@ -60,7 +60,8 @@ class PrayerSequenceEngine {
                     ),
                     coachInstruction = lText(takbirHintLat, takbirHintCyr),
                     ttsPrompt = "Niyat qiling va qo'llaringizni ko'tarib: Allohu akbar",
-                    minHoldDurationMs = 4000L
+                    minHoldDurationMs = 4000L,
+                    audioAssetId = "takbir"
                 )
 
                 steps += PrayerStep(
@@ -79,7 +80,8 @@ class PrayerSequenceEngine {
                         "$qiyomHandsHintCyr ва Сано дуосини ўқинг"
                     ),
                     ttsPrompt = "Qo'llaringizni bog'lang. ${PrayerContentCatalog.surahs[0].ttsPrompt}",
-                    minHoldDurationMs = 7000L
+                    minHoldDurationMs = 7000L,
+                    audioAssetId = PrayerContentCatalog.surahs[0].audioAssetId
                 )
             }
 
@@ -103,7 +105,8 @@ class PrayerSequenceEngine {
                 ),
                 ttsPrompt = PrayerContentCatalog.surahs[1].ttsPrompt,
                 minHoldDurationMs = 15000L,
-                requiresPoseTransition = rakat > 1
+                requiresPoseTransition = rakat > 1,
+                audioAssetId = PrayerContentCatalog.surahs[1].audioAssetId
             )
 
             // Zam sura in rakats 1 & 2, or all rakats for sunnat/vitr
@@ -136,7 +139,8 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = zamSura.ttsPrompt,
                     minHoldDurationMs = 9000L,
-                    requiresPoseTransition = false
+                    requiresPoseTransition = false,
+                    audioAssetId = zamSura.audioAssetId
                 )
             }
 
@@ -161,7 +165,8 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Allohu akbar. Allohumma inna nasta'iynuka va nastag'firuk, va nu'minu bika va natavakkalu alayk.",
                     minHoldDurationMs = 10000L,
-                    requiresPoseTransition = false
+                    requiresPoseTransition = false,
+                    audioAssetId = "qunut"
                 )
             }
 
@@ -185,7 +190,8 @@ class PrayerSequenceEngine {
                     "Белни текис тутиб эгилинг. Тасбеҳдан сўнг тик туринг"
                 ),
                 ttsPrompt = "Allohu akbar. Subhana Robbiyal Aziym. Subhana Robbiyal Aziym. Subhana Robbiyal Aziym.",
-                minHoldDurationMs = 7000L
+                minHoldDurationMs = 7000L,
+                audioAssetId = "ruku"
             )
 
             // Qavma
@@ -208,7 +214,8 @@ class PrayerSequenceEngine {
                     "Тик туриб ростлангач, «Аллоҳу акбар» деб саждага боринг"
                 ),
                 ttsPrompt = "Sami'allohu liman hamidah. Robbana lakal hamd.",
-                minHoldDurationMs = 5000L
+                minHoldDurationMs = 5000L,
+                audioAssetId = "qavma"
             )
 
             // 1st Sajda
@@ -231,7 +238,8 @@ class PrayerSequenceEngine {
                     "Пешона ва бурунни жойнамозга қўйинг. Сўнг ўтиринг"
                 ),
                 ttsPrompt = "Allohu akbar. Subhana Robbiyal A'la. Subhana Robbiyal A'la. Subhana Robbiyal A'la.",
-                minHoldDurationMs = 7000L
+                minHoldDurationMs = 7000L,
+                audioAssetId = "sajda"
             )
 
             // Jalsa
@@ -254,7 +262,8 @@ class PrayerSequenceEngine {
                     "Бироз хотиржам ўтириб, иккинчи саждага боринг"
                 ),
                 ttsPrompt = "Allohu akbar. Robbig'firliy.",
-                minHoldDurationMs = 4500L
+                minHoldDurationMs = 4500L,
+                audioAssetId = "jalsa"
             )
 
             // 2nd Sajda
@@ -279,7 +288,8 @@ class PrayerSequenceEngine {
                     else "Тасбеҳдан сўнг навбатдаги ракат учун тик туринг"
                 ),
                 ttsPrompt = "Allohu akbar. Subhana Robbiyal A'la. Subhana Robbiyal A'la. Subhana Robbiyal A'la.",
-                minHoldDurationMs = 7000L
+                minHoldDurationMs = 7000L,
+                audioAssetId = "sajda"
             )
 
             // Qa'dai ula (2nd rakat when total > 2)
@@ -300,7 +310,8 @@ class PrayerSequenceEngine {
                         "Аттаҳият тугагач, 3-ракатга тик туринг"
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
-                    minHoldDurationMs = 12000L
+                    minHoldDurationMs = 12000L,
+                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId
                 )
             }
 
@@ -322,7 +333,8 @@ class PrayerSequenceEngine {
                         "Ўтирган ҳолда Аттаҳиятни ўқинг"
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
-                    minHoldDurationMs = 12000L
+                    minHoldDurationMs = 12000L,
+                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId
                 )
 
                 steps += PrayerStep(
@@ -342,7 +354,8 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "${PrayerContentCatalog.surahs[6].ttsPrompt} ${PrayerContentCatalog.surahs[7].ttsPrompt}",
                     minHoldDurationMs = 12000L,
-                    requiresPoseTransition = false
+                    requiresPoseTransition = false,
+                    audioAssetId = "salovat,robbana"
                 )
 
                 steps += PrayerStep(
@@ -365,7 +378,8 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "O'ng va chap yelkangizga qarab: Assalamu alaykum va rohmatulloh. Namozingiz qabul bo'lsin.",
                     minHoldDurationMs = 6000L,
-                    requiresPoseTransition = false
+                    requiresPoseTransition = false,
+                    audioAssetId = "salam"
                 )
             }
         }

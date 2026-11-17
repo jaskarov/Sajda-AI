@@ -21,7 +21,7 @@ data class UserSettings(
     val gender: Gender = Gender.MALE,
     val script: TextScript = TextScript.LATIN,
     val selectedCityId: String = "fargona",
-    val useGeminiTts: Boolean = true,
+    val preferOfflineMp3: Boolean = true,
     val voiceSpeed: Float = 1.0f,
     val darkRoomLuminanceThreshold: Float = 28f,
     val alarmMap: Map<PrayerType, Boolean> = PrayerType.entries.associateWith { it.isPrayable }
@@ -34,7 +34,7 @@ class UserPreferencesRepository(private val context: Context) {
         val GENDER = stringPreferencesKey("gender")
         val SCRIPT = stringPreferencesKey("script")
         val CITY_ID = stringPreferencesKey("city_id")
-        val USE_GEMINI_TTS = booleanPreferencesKey("use_gemini_tts")
+        val PREFER_OFFLINE_MP3 = booleanPreferencesKey("prefer_offline_mp3")
         val VOICE_SPEED = floatPreferencesKey("voice_speed")
         val DARK_THRESHOLD = floatPreferencesKey("dark_threshold")
         fun alarmKey(type: PrayerType) = booleanPreferencesKey("alarm_${type.id}")
@@ -49,7 +49,7 @@ class UserPreferencesRepository(private val context: Context) {
             gender = Gender.fromId(prefs[Keys.GENDER]),
             script = TextScript.fromId(prefs[Keys.SCRIPT]),
             selectedCityId = prefs[Keys.CITY_ID] ?: "fargona",
-            useGeminiTts = prefs[Keys.USE_GEMINI_TTS] ?: true,
+            preferOfflineMp3 = prefs[Keys.PREFER_OFFLINE_MP3] ?: true,
             voiceSpeed = prefs[Keys.VOICE_SPEED] ?: 1.0f,
             darkRoomLuminanceThreshold = prefs[Keys.DARK_THRESHOLD] ?: 28f,
             alarmMap = alarms
@@ -77,8 +77,8 @@ class UserPreferencesRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.CITY_ID] = cityId }
     }
 
-    suspend fun setUseGeminiTts(enabled: Boolean) {
-        context.dataStore.edit { it[Keys.USE_GEMINI_TTS] = enabled }
+    suspend fun setPreferOfflineMp3(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.PREFER_OFFLINE_MP3] = enabled }
     }
 
     suspend fun setVoiceSpeed(speed: Float) {

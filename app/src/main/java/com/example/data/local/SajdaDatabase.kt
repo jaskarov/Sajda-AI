@@ -8,14 +8,16 @@ import androidx.room.RoomDatabase
 @Database(
     entities = [
         PrayerHistoryEntity::class,
-        DailyPrayerProgressEntity::class
+        DailyPrayerProgressEntity::class,
+        PrayerCalendarDayEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class SajdaDatabase : RoomDatabase() {
     abstract fun prayerHistoryDao(): PrayerHistoryDao
     abstract fun dailyPrayerProgressDao(): DailyPrayerProgressDao
+    abstract fun prayerCalendarDao(): PrayerCalendarDao
 
     companion object {
         @Volatile

@@ -103,7 +103,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         audioCoach.speak(
             text = message,
             gender = settings.gender,
-            useGeminiTts = settings.useGeminiTts,
+            preferOfflineMp3 = settings.preferOfflineMp3,
             speed = settings.voiceSpeed
         )
     }
@@ -235,8 +235,9 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         audioCoach.speak(
             text = step.ttsPrompt,
             gender = state.settings.gender,
-            useGeminiTts = state.settings.useGeminiTts,
+            preferOfflineMp3 = state.settings.preferOfflineMp3,
             speed = state.settings.voiceSpeed,
+            audioAssetId = step.audioAssetId,
             onCompleted = {
                 _uiState.update { it.copy(stepAudioDone = true) }
                 // If Audio-Only mode and timer already expired, advance automatically

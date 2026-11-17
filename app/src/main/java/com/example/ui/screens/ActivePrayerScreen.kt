@@ -14,10 +14,12 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -65,6 +67,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -125,6 +128,7 @@ fun ActivePrayerScreen(
 
     val detectedPose = uiState.poseSnapshot.confirmedPose
     val isPoseAligned = detectedPose == step.expectedPose
+    val hasLiveSkeleton = uiState.poseSnapshot.landmarks.isNotEmpty()
 
     Box(
         modifier = Modifier
@@ -137,8 +141,8 @@ fun ActivePrayerScreen(
                 .fillMaxSize()
                 .widthIn(max = 640.dp)
                 .align(Alignment.TopCenter)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Top Header: Rakat | Expected Pose | Exit
             Surface(
@@ -149,7 +153,7 @@ fun ActivePrayerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -157,7 +161,7 @@ fun ActivePrayerScreen(
                         IconButton(
                             onClick = onExit,
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(48.dp)
                                 .testTag("active_prayer_exit_button")
                         ) {
                             Icon(
@@ -217,7 +221,7 @@ fun ActivePrayerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -276,158 +280,196 @@ fun ActivePrayerScreen(
                 }
             }
 
-            // Main Content Area: PiP Camera + Synchronized Large Recitation Text
-            Row(
+            // Main Content Area: PiP Camera + Synchronized Responsive Recitation Text
+            BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .weight(1f)
             ) {
-                // Left Mini Camera + Skeleton OR Audio Pulse Panel
-                Column(
-                    modifier = Modifier.width(126.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                val isCompactHeight = maxHeight < 360.dp
+                val isNarrowWidth = maxWidth < 340.dp
+                val panelWidth: Dp = if (isNarrowWidth) 120.dp else 138.dp
+                val previewHeight: Dp = if (isCompactHeight) 156.dp else 196.dp
+
+                val arabicFontSize = if (isCompactHeight) 19.sp else 23.sp
+                val arabicLineHeight = if (isCompactHeight) 29.sp else 34.sp
+                val translitFontSize = if (isCompactHeight) 16.sp else 19.sp
+                val translitLineHeight = if (isCompactHeight) 23.sp else 28.sp
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (uiState.mode == CoachMode.CAMERA_AI && hasCameraPermission) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 126.dp, height = 176.dp)
-                                .clip(RoundedCornerShape(18.dp))
-                                .background(Color.Black)
-                        ) {
-                            CameraPosePreview(
-                                darkLuminanceThreshold = uiState.settings.darkRoomLuminanceThreshold,
-                                onPoseResult = onPoseResult,
-                                poseSnapshot = uiState.poseSnapshot,
-                                showSkeleton = true,
-                                isMatched = isPoseAligned,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
-
-                        // Live angle telemetry chip
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = ObsidianSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = detectedPose.title.get(script),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (isPoseAligned) PoseMatchedGreen else NightGold,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "θt: ${uiState.poseSnapshot.torsoAngle.roundToInt()}°",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                                Text(
-                                    text = "θk: ${uiState.poseSnapshot.kneeAngle.roundToInt()}°",
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.85f)
-                                )
-                            }
-                        }
-
-                        OutlinedButton(
-                            onClick = onSwitchToAudioOnly,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("active_switch_audio_button"),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
-                        ) {
-                            Text(
-                                text = lText("Audio", "Аудио").get(script),
-                                color = Color.White,
-                                fontSize = 12.sp
-                            )
-                        }
-                    } else {
-                        AudioPulseCard(
-                            remainingSec = uiState.audioOnlyRemainingSec,
-                            isPaused = uiState.isPaused,
-                            script = script
-                        )
-                    }
-                }
-
-                // Right: Large High-Contrast Surah & Audio-Synchronized Words
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxSize(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
-                    border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.35f))
-                ) {
+                    // Left Mini Camera + Skeleton OR Audio Pulse Panel
                     Column(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .width(panelWidth)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = step.recitationTitle.get(script),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = NightGold,
-                            letterSpacing = 0.8.sp
-                        )
+                        if (uiState.mode == CoachMode.CAMERA_AI && hasCameraPermission) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = panelWidth, height = previewHeight)
+                                    .clip(RoundedCornerShape(18.dp))
+                                    .background(Color.Black)
+                            ) {
+                                CameraPosePreview(
+                                    darkLuminanceThreshold = uiState.settings.darkRoomLuminanceThreshold,
+                                    onPoseResult = onPoseResult,
+                                    poseSnapshot = uiState.poseSnapshot,
+                                    showSkeleton = true,
+                                    isMatched = isPoseAligned,
+                                    modifier = Modifier.fillMaxSize()
+                                )
 
-                        Text(
-                            text = step.arabicText,
-                            fontSize = 24.sp,
-                            lineHeight = 36.sp,
-                            textAlign = TextAlign.End,
-                            color = NightEmeraldPrimary,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        // Audio-synchronized word-by-word coloring
-                        val words = step.getWords(script)
-                        val highlightedCount = (words.size * uiState.playbackProgress)
-                            .roundToInt()
-                            .coerceIn(0, words.size)
-
-                        val annotated = buildAnnotatedString {
-                            words.forEachIndexed { idx, word ->
-                                val isSpoken = idx < highlightedCount
-                                withStyle(
-                                    SpanStyle(
-                                        color = if (isSpoken) NightGold else Color.White,
-                                        fontWeight = if (isSpoken) FontWeight.Bold else FontWeight.Medium
-                                    )
+                                // Skeleton Overlay status badge
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color.Black.copy(alpha = 0.65f),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(6.dp)
                                 ) {
-                                    append(word)
+                                    Text(
+                                        text = if (hasLiveSkeleton) {
+                                            lText("Skelet faol", "Скелет фаол").get(script)
+                                        } else {
+                                            lText("Tana kutilmoqda", "Тана кутилмоқда").get(script)
+                                        },
+                                        fontSize = 10.sp,
+                                        color = if (hasLiveSkeleton) PoseMatchedGreen else Color.White,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        maxLines = 1
+                                    )
                                 }
-                                if (idx < words.lastIndex) append(" ")
                             }
+
+                            // Live angle telemetry chip
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = ObsidianSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = detectedPose.title.get(script),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (isPoseAligned) PoseMatchedGreen else NightGold,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = "θt: ${uiState.poseSnapshot.torsoAngle.roundToInt()}° • θk: ${uiState.poseSnapshot.kneeAngle.roundToInt()}°",
+                                        fontFamily = JetBrainsMonoFontFamily,
+                                        fontSize = 10.sp,
+                                        color = Color.White.copy(alpha = 0.85f),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = onSwitchToAudioOnly,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                                    .testTag("active_switch_audio_button"),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                            ) {
+                                Text(
+                                    text = lText("Audio", "Аудио").get(script),
+                                    color = Color.White,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        } else {
+                            AudioPulseCard(
+                                width = panelWidth,
+                                height = previewHeight,
+                                remainingSec = uiState.audioOnlyRemainingSec,
+                                isPaused = uiState.isPaused,
+                                script = script
+                            )
                         }
+                    }
 
-                        Text(
-                            text = annotated,
-                            fontSize = 22.sp,
-                            lineHeight = 32.sp
-                        )
+                    // Right: Responsive Scrollable Surah & Audio-Synchronized Words
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
+                        border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.35f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(rememberScrollState())
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = step.recitationTitle.get(script),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = NightGold,
+                                letterSpacing = 0.8.sp
+                            )
 
-                        Text(
-                            text = step.meaning.get(script),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.68f)
-                        )
+                            Text(
+                                text = step.arabicText,
+                                fontSize = arabicFontSize,
+                                lineHeight = arabicLineHeight,
+                                textAlign = TextAlign.End,
+                                color = NightEmeraldPrimary,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            // Audio-synchronized word-by-word coloring
+                            val words = step.getWords(script)
+                            val highlightedCount = (words.size * uiState.playbackProgress)
+                                .roundToInt()
+                                .coerceIn(0, words.size)
+
+                            val annotated = buildAnnotatedString {
+                                words.forEachIndexed { idx, word ->
+                                    val isSpoken = idx < highlightedCount
+                                    withStyle(
+                                        SpanStyle(
+                                            color = if (isSpoken) NightGold else Color.White,
+                                            fontWeight = if (isSpoken) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    ) {
+                                        append(word)
+                                    }
+                                    if (idx < words.lastIndex) append(" ")
+                                }
+                            }
+
+                            Text(
+                                text = annotated,
+                                fontSize = translitFontSize,
+                                lineHeight = translitLineHeight
+                            )
+
+                            Text(
+                                text = step.meaning.get(script),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.72f)
+                            )
+
+                            Spacer(Modifier.height(10.dp))
+                        }
                     }
                 }
             }
 
-            // Transparent Gemini TTS Status Line
+            // Transparent Audio Coach Status Line
             AudioStatusBanner(status = uiState.audioStatus)
 
             // Coach Instruction Card
@@ -439,11 +481,11 @@ fun ActivePrayerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
-                        text = lText("🤖 Ustoz ko‘rsatmasi:", "🤖 Устоз кўрсатмаси:").get(script),
+                        text = lText("Ustoz ko‘rsatmasi:", "Устоз кўрсатмаси:").get(script),
                         style = MaterialTheme.typography.labelMedium,
                         color = NightGold
                     )
@@ -451,7 +493,8 @@ fun ActivePrayerScreen(
                         text = step.coachInstruction.get(script),
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 2
                     )
                 }
             }
@@ -465,7 +508,7 @@ fun ActivePrayerScreen(
                     onClick = onTogglePause,
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp)
+                        .height(52.dp)
                         .testTag("pause_resume_button"),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.45f)),
@@ -491,7 +534,7 @@ fun ActivePrayerScreen(
                     onClick = onNextStep,
                     modifier = Modifier
                         .weight(1f)
-                        .height(56.dp)
+                        .height(52.dp)
                         .testTag("next_step_button"),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
@@ -514,6 +557,8 @@ fun ActivePrayerScreen(
 
 @Composable
 private fun AudioPulseCard(
+    width: Dp,
+    height: Dp,
     remainingSec: Int,
     isPaused: Boolean,
     script: com.example.domain.model.TextScript
@@ -530,7 +575,7 @@ private fun AudioPulseCard(
     )
 
     Surface(
-        modifier = Modifier.size(width = 126.dp, height = 176.dp),
+        modifier = Modifier.size(width = width, height = height),
         shape = RoundedCornerShape(18.dp),
         color = ObsidianSurfaceVariant,
         border = BorderStroke(1.5.dp, NightGold.copy(alpha = 0.55f))
@@ -571,13 +616,11 @@ private fun AudioPulseCard(
 private fun AudioStatusBanner(status: AudioCoachStatus) {
     val (text, color) = when (status) {
         AudioCoachStatus.Idle -> return
-        AudioCoachStatus.SynthesizingGeminiTts ->
-            "Gemini TTS (gemini-3.8-flash-tts) ovoz tayyorlamoqda..." to NightEmeraldPrimary
-        is AudioCoachStatus.PlayingGeminiTts ->
-            "Gemini TTS faol • ${status.modelUsed}" to PoseMatchedGreen
+        is AudioCoachStatus.PlayingOfflineAudio ->
+            "Oflayn Qori MP3 (ExoPlayer) • ${status.assetLabel}" to PoseMatchedGreen
         is AudioCoachStatus.PlayingOfflineTts -> {
             val detail = if (!status.notice.isNullOrBlank()) " • ${status.notice}" else ""
-            "Oflayn ovozli ustoz faol$detail" to PoseWarningAmber
+            "Oflayn ovozli yo‘riqnoma (TTS)$detail" to NightEmeraldPrimary
         }
         is AudioCoachStatus.Error ->
             status.message to PoseAlertCoral

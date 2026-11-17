@@ -57,4 +57,26 @@ class PrayerEngineUnitTest {
         val vitrSteps = engine.buildSteps(PrayerTrack.VITR_VOJIB, Gender.MALE)
         assertTrue(vitrSteps.any { it.recitationTitle.latin.contains("QUNUT") })
     }
+
+    @Test
+    fun countdown_matchesSystemLocalTimeExactly() {
+        val useCase = GetPrayerTimesUseCase()
+        val city = UzbekistanCities.findById("toshkent")
+        val cal = java.util.Calendar.getInstance().apply {
+            set(2026, java.util.Calendar.NOVEMBER, 15, 3, 37, 30)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val summary = useCase.calculateForToday(
+            city = city,
+            completedToday = emptySet(),
+            alarmMap = emptyMap(),
+            nowMillis = cal.timeInMillis
+        )
+        val nextSlot = summary.slots.first { it.type == summary.nextPrayer }
+        assertEquals(nextSlot.timeFormatted, summary.nextPrayerTimeFormatted)
+
+        val nowSec = 3 * 3600L + 37 * 60L + 30L
+        val targetSec = nextSlot.hour * 3600L + nextSlot.minute * 60L
+        assertEquals(targetSec - nowSec, summary.countdownSeconds)
+    }
 }

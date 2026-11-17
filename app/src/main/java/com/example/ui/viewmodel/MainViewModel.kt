@@ -12,6 +12,8 @@ import com.example.alarm.PrayerWorkScheduler
 import com.example.audio.AudioCoachStatus
 import com.example.audio.PrayerAudioCoach
 import com.example.data.local.DailyPrayerProgressEntity
+import com.example.data.local.PrayerCalendarDayEntity
+import com.example.data.local.PrayerCalendarRepository
 import com.example.data.local.PrayerHistoryEntity
 import com.example.data.local.PrayerHistoryRepository
 import com.example.data.local.SajdaDatabase
@@ -32,6 +34,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -49,16 +52,25 @@ data class MainUiState(
     val compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val hasCompassSensor: Boolean = true,
     val audioStatus: AudioCoachStatus = AudioCoachStatus.Idle,
+    val calendarSource: String = "uz_taqvim_365",
+    val lastCalendarSyncMillis: Long = 0L,
+    val isCalendarSyncing: Boolean = false,
     val isReady: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val database = SajdaDatabase.getInstance(application)
     private val prefsRepo = UserPreferencesRepository(application)
-    private val historyRepo = SajdaDatabase.getInstance(application).let { db ->
-        PrayerHistoryRepository(db.prayerHistoryDao(), db.dailyPrayerProgressDao())
-    }
+    private val historyRepo = PrayerHistoryRepository(
+        database.prayerHistoryDao(),
+        database.dailyPrayerProgressDao()
+    )
+    private val calendarRepo = PrayerCalendarRepository(
+        application,
+        database.prayerCalendarDao()
+    )
     private val getPrayerTimesUseCase = GetPrayerTimesUseCase()
     private val workScheduler = PrayerWorkScheduler(application)
     private val compassSensor = QiblaCompassSensor(application)
@@ -66,6 +78,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val tickerFlow = MutableStateFlow(System.currentTimeMillis())
     private val weekOffsetFlow = MutableStateFlow(0)
+    private val calendarSyncingFlow = MutableStateFlow(false)
 
     private val weeklySummaryFlow = weekOffsetFlow.flatMapLatest { offset ->
         val (startKey, endKey) = WeeklyPrayerAnalytics.weekBounds(weekOffset = offset)
@@ -77,17 +90,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private val calendarPairFlow = prefsRepo.settingsFlow
+        .map { it.selectedCityId }
+        .distinctUntilChanged()
+        .flatMapLatest { cityId ->
+            combine(
+                calendarRepo.observeTodayAndTomorrow(cityId),
+                calendarRepo.observeLatestSyncMillis(cityId),
+                calendarSyncingFlow
+            ) { pair, latestSync, syncing ->
+                CalendarBundle(
+                    todayDay = pair.first,
+                    tomorrowDay = pair.second,
+                    latestSyncMillis = latestSync ?: 0L,
+                    isSyncing = syncing
+                )
+            }
+        }
+
     private val databaseFlows = combine(
         historyRepo.observeTodayProgress(),
         historyRepo.recentDailyProgress,
         historyRepo.recentHistory,
-        weeklySummaryFlow
-    ) { todayProgress, dailyHistory, sessionHistory, weeklySummary ->
+        weeklySummaryFlow,
+        calendarPairFlow
+    ) { todayProgress, dailyHistory, sessionHistory, weeklySummary, calendarBundle ->
         DatabaseBundle(
             todayProgress = todayProgress,
             dailyProgressHistory = dailyHistory,
             sessionHistory = sessionHistory,
-            weeklySummary = weeklySummary
+            weeklySummary = weeklySummary,
+            calendarBundle = calendarBundle
         )
     }
 
@@ -102,7 +135,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             city = city,
             completedToday = dbBundle.todayProgress.completedTypes(),
             alarmMap = settings.alarmMap,
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            todayCalendarDay = dbBundle.calendarBundle.todayDay,
+            tomorrowCalendarDay = dbBundle.calendarBundle.tomorrowDay
         )
         val declination = GeomagneticField(
             city.latitude.toFloat(),
@@ -123,6 +158,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             compassAccuracy = compassReading.accuracy,
             hasCompassSensor = compassReading.hasSensor,
             audioStatus = audioCoach.status.value,
+            calendarSource = dbBundle.calendarBundle.todayDay?.source ?: "uz_taqvim_365",
+            lastCalendarSyncMillis = dbBundle.calendarBundle.latestSyncMillis,
+            isCalendarSyncing = dbBundle.calendarBundle.isSyncing,
             isReady = true
         )
     }.stateIn(
@@ -133,13 +171,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
+            calendarRepo.ensureSeededFromAssets()
             val initialSettings = prefsRepo.settingsFlow.first()
-            workScheduler.syncAllPrayers(initialSettings)
+            calendarRepo.syncFromNetworkIfConnected(initialSettings.selectedCityId)
+            rescheduleAlarms()
         }
         viewModelScope.launch {
             while (true) {
                 tickerFlow.value = System.currentTimeMillis()
                 delay(1000L)
+            }
+        }
+    }
+
+    fun syncPrayerCalendarNow() {
+        viewModelScope.launch {
+            if (calendarSyncingFlow.value) return@launch
+            calendarSyncingFlow.value = true
+            try {
+                val settings = prefsRepo.settingsFlow.first()
+                calendarRepo.syncFromNetworkIfConnected(settings.selectedCityId)
+                rescheduleAlarms()
+            } finally {
+                calendarSyncingFlow.value = false
             }
         }
     }
@@ -156,6 +210,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun completeOnboarding(gender: Gender, script: TextScript, cityId: String) {
         viewModelScope.launch {
             prefsRepo.completeOnboarding(gender, script, cityId)
+            calendarRepo.syncFromNetworkIfConnected(cityId)
             rescheduleAlarms()
         }
     }
@@ -174,15 +229,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setCityId(cityId: String) {
         viewModelScope.launch {
             prefsRepo.setCityId(cityId)
+            calendarRepo.syncFromNetworkIfConnected(cityId)
             rescheduleAlarms()
         }
     }
 
-    fun setUseGeminiTts(enabled: Boolean) {
-        if (enabled) {
-            PrayerAudioCoach.clearSessionBlock()
-        }
-        viewModelScope.launch { prefsRepo.setUseGeminiTts(enabled) }
+    fun setPreferOfflineMp3(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setPreferOfflineMp3(enabled) }
     }
 
     fun setVoiceSpeed(speed: Float) {
@@ -215,20 +268,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             prefsRepo.setPrayerAlarmEnabled(type, next)
             val updatedSettings = prefsRepo.settingsFlow.first()
             if (next) {
-                workScheduler.scheduleNextOccurrence(type, updatedSettings)
+                val (todayDay, tomorrowDay) = calendarRepo.getTodayAndTomorrow(updatedSettings.selectedCityId)
+                workScheduler.scheduleNextOccurrence(
+                    prayerType = type,
+                    settings = updatedSettings,
+                    todayCalendarDay = todayDay,
+                    tomorrowCalendarDay = tomorrowDay
+                )
             } else {
                 workScheduler.cancelPrayer(type)
             }
         }
     }
 
-    fun speakSample(text: String) {
+    fun speakSample(text: String, audioAssetId: String = "") {
         val settings = uiState.value.settings
         audioCoach.speak(
             text = text,
             gender = settings.gender,
-            useGeminiTts = settings.useGeminiTts,
-            speed = settings.voiceSpeed
+            preferOfflineMp3 = settings.preferOfflineMp3,
+            speed = settings.voiceSpeed,
+            audioAssetId = audioAssetId
         )
     }
 
@@ -252,7 +312,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun rescheduleAlarms() {
         val latestSettings = prefsRepo.settingsFlow.first()
-        workScheduler.syncAllPrayers(latestSettings)
+        val (todayDay, tomorrowDay) = calendarRepo.getTodayAndTomorrow(latestSettings.selectedCityId)
+        workScheduler.syncAllPrayers(
+            settings = latestSettings,
+            todayCalendarDay = todayDay,
+            tomorrowCalendarDay = tomorrowDay
+        )
     }
 
     override fun onCleared() {
@@ -260,10 +325,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         audioCoach.release()
     }
 
+    private data class CalendarBundle(
+        val todayDay: PrayerCalendarDayEntity?,
+        val tomorrowDay: PrayerCalendarDayEntity?,
+        val latestSyncMillis: Long,
+        val isSyncing: Boolean
+    )
+
     private data class DatabaseBundle(
         val todayProgress: DailyPrayerProgressEntity,
         val dailyProgressHistory: List<DailyPrayerProgressEntity>,
         val sessionHistory: List<PrayerHistoryEntity>,
-        val weeklySummary: WeeklyPrayerSummary
+        val weeklySummary: WeeklyPrayerSummary,
+        val calendarBundle: CalendarBundle
     )
 }

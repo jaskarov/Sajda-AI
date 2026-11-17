@@ -18,7 +18,16 @@ class BootCompletedReceiver : BroadcastReceiver() {
                 val appContext = context.applicationContext
                 val prefs = UserPreferencesRepository(appContext)
                 val settings = prefs.settingsFlow.first()
-                PrayerWorkScheduler(appContext).syncAllPrayers(settings)
+                val calendarRepo = com.example.data.local.PrayerCalendarRepository(
+                    appContext,
+                    com.example.data.local.SajdaDatabase.getInstance(appContext).prayerCalendarDao()
+                )
+                val (todayDay, tomorrowDay) = calendarRepo.getTodayAndTomorrow(settings.selectedCityId)
+                PrayerWorkScheduler(appContext).syncAllPrayers(
+                    settings = settings,
+                    todayCalendarDay = todayDay,
+                    tomorrowCalendarDay = tomorrowDay
+                )
             } finally {
                 pendingResult.finish()
             }

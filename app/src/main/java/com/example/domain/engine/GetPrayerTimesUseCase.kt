@@ -26,7 +26,9 @@ class GetPrayerTimesUseCase {
         city: UzbekCity,
         completedToday: Set<PrayerType>,
         alarmMap: Map<PrayerType, Boolean>,
-        nowMillis: Long = System.currentTimeMillis()
+        nowMillis: Long = System.currentTimeMillis(),
+        todayCalendarDay: com.example.data.local.PrayerCalendarDayEntity? = null,
+        tomorrowCalendarDay: com.example.data.local.PrayerCalendarDayEntity? = null
     ): PrayerScheduleSummary {
         val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
         val year = cal.get(Calendar.YEAR)
@@ -37,38 +39,73 @@ class GetPrayerTimesUseCase {
                 cal.get(Calendar.MINUTE) * 60L +
                 cal.get(Calendar.SECOND)
 
-        val times = computeTimesHours(
-            year = year,
-            month = month,
-            day = day,
-            latitude = city.latitude,
-            longitude = city.longitude,
-            timeZoneHours = 5.0
-        )
+        val rawMinutes = if (todayCalendarDay != null) {
+            linkedMapOf(
+                PrayerType.BOMDOD to parseHhMmToMinutes(todayCalendarDay.bomdod),
+                PrayerType.QUYOSH to parseHhMmToMinutes(todayCalendarDay.quyosh),
+                PrayerType.PESHIN to parseHhMmToMinutes(todayCalendarDay.peshin),
+                PrayerType.ASR to parseHhMmToMinutes(todayCalendarDay.asr),
+                PrayerType.SHOM to parseHhMmToMinutes(todayCalendarDay.shom),
+                PrayerType.XUFTON to parseHhMmToMinutes(todayCalendarDay.xufton)
+            )
+        } else {
+            val times = computeTimesHours(
+                year = year,
+                month = month,
+                day = day,
+                latitude = city.latitude,
+                longitude = city.longitude,
+                timeZoneHours = 5.0
+            )
 
-        val rawMinutes = linkedMapOf(
-            PrayerType.BOMDOD to toMinutes(times[PrayerType.BOMDOD]!!) + city.fajrOffsetMin,
-            PrayerType.QUYOSH to toMinutes(times[PrayerType.QUYOSH]!!),
-            PrayerType.PESHIN to toMinutes(times[PrayerType.PESHIN]!!),
-            PrayerType.ASR to toMinutes(times[PrayerType.ASR]!!),
-            PrayerType.SHOM to toMinutes(times[PrayerType.SHOM]!!) + city.maghribOffsetMin,
-            PrayerType.XUFTON to toMinutes(times[PrayerType.XUFTON]!!)
-        )
+            linkedMapOf(
+                PrayerType.BOMDOD to toMinutes(times[PrayerType.BOMDOD]!!) + city.fajrOffsetMin,
+                PrayerType.QUYOSH to toMinutes(times[PrayerType.QUYOSH]!!),
+                PrayerType.PESHIN to toMinutes(times[PrayerType.PESHIN]!!),
+                PrayerType.ASR to toMinutes(times[PrayerType.ASR]!!),
+                PrayerType.SHOM to toMinutes(times[PrayerType.SHOM]!!) + city.maghribOffsetMin,
+                PrayerType.XUFTON to toMinutes(times[PrayerType.XUFTON]!!)
+            )
+        }
 
-        val nowMinOfDay = (nowSecondsOfDay / 60L).toInt()
-        val nextPrayer = rawMinutes.entries.firstOrNull { it.value > nowMinOfDay }?.key
-            ?: PrayerType.BOMDOD
+        val nextEntryToday = rawMinutes.entries.firstOrNull { (_, mins) ->
+            mins * 60L > nowSecondsOfDay
+        }
+        val nextPrayer = nextEntryToday?.key ?: PrayerType.BOMDOD
 
         val currentPrayer = rawMinutes.entries
-            .lastOrNull { it.key.isPrayable && it.value <= nowMinOfDay }?.key
+            .lastOrNull { (type, mins) -> type.isPrayable && mins * 60L <= nowSecondsOfDay }?.key
             ?: PrayerType.XUFTON
 
-        val nextTargetMinutes = rawMinutes[nextPrayer]!!
-        val countdownSeconds = if (nextTargetMinutes * 60L > nowSecondsOfDay) {
-            nextTargetMinutes * 60L - nowSecondsOfDay
+        val (nextTargetTotalMins, countdownSeconds) = if (nextEntryToday != null) {
+            val targetSec = nextEntryToday.value * 60L
+            nextEntryToday.value to (targetSec - nowSecondsOfDay)
         } else {
-            (24L * 3600L - nowSecondsOfDay) + nextTargetMinutes * 60L
+            // After Xufton: read tomorrow's Bomdod from Room calendar or calculate it
+            val tomorrowBomdodMins = if (tomorrowCalendarDay != null) {
+                parseHhMmToMinutes(tomorrowCalendarDay.bomdod)
+            } else {
+                val tomorrowCal = (cal.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
+                val tomorrowTimes = computeTimesHours(
+                    year = tomorrowCal.get(Calendar.YEAR),
+                    month = tomorrowCal.get(Calendar.MONTH) + 1,
+                    day = tomorrowCal.get(Calendar.DAY_OF_MONTH),
+                    latitude = city.latitude,
+                    longitude = city.longitude,
+                    timeZoneHours = 5.0
+                )
+                toMinutes(tomorrowTimes[PrayerType.BOMDOD]!!) + city.fajrOffsetMin
+            }
+            val remaining = (24L * 3600L - nowSecondsOfDay) + tomorrowBomdodMins * 60L
+            tomorrowBomdodMins to remaining
         }
+
+        val nextPrayerTimeFormatted = String.format(
+            Locale.US,
+            "%02d:%02d",
+            (nextTargetTotalMins / 60) % 24,
+            nextTargetTotalMins % 60
+        )
 
         val slots = rawMinutes.entries.map { (type, totalMins) ->
             val h = (totalMins / 60) % 24
@@ -78,7 +115,7 @@ class GetPrayerTimesUseCase {
                 timeFormatted = String.format(Locale.US, "%02d:%02d", h, m),
                 hour = h,
                 minute = m,
-                isPassed = totalMins <= nowMinOfDay && type != currentPrayer,
+                isPassed = totalMins * 60L <= nowSecondsOfDay && type != currentPrayer,
                 isCurrent = type == currentPrayer,
                 isCompletedToday = completedToday.contains(type),
                 alarmEnabled = alarmMap[type] ?: type.isPrayable
@@ -91,6 +128,7 @@ class GetPrayerTimesUseCase {
         return PrayerScheduleSummary(
             city = city,
             nextPrayer = nextPrayer,
+            nextPrayerTimeFormatted = nextPrayerTimeFormatted,
             currentPrayer = currentPrayer,
             countdownSeconds = countdownSeconds,
             slots = slots,
@@ -168,6 +206,13 @@ class GetPrayerTimesUseCase {
     private fun toMinutes(hours: Double): Int {
         val normalized = fixHour(hours)
         return (normalized * 60.0).roundToInt().coerceIn(0, 23 * 60 + 59)
+    }
+
+    private fun parseHhMmToMinutes(hhMm: String): Int {
+        val parts = hhMm.trim().split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        return (h * 60 + m).coerceIn(0, 23 * 60 + 59)
     }
 
     private fun fixAngle(a: Double): Double {

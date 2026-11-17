@@ -18,7 +18,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -30,6 +32,7 @@ import com.example.ui.theme.PoseWarningAmber
 import com.example.vision.PrayerPoseAnalyzer
 import com.google.mlkit.vision.pose.PoseLandmark
 import java.util.concurrent.Executors
+import kotlin.math.max
 
 @Composable
 fun CameraPosePreview(
@@ -120,9 +123,11 @@ fun CameraPosePreview(
             factory = { previewView },
             modifier = Modifier.fillMaxSize()
         )
-        if (showSkeleton && poseSnapshot.landmarks.isNotEmpty()) {
+        if (showSkeleton) {
             PoseSkeletonCanvas(
                 landmarks = poseSnapshot.landmarks,
+                imageWidth = poseSnapshot.imageWidth,
+                imageHeight = poseSnapshot.imageHeight,
                 isFrontCamera = poseSnapshot.isFrontCamera,
                 boneColor = if (isMatched) PoseMatchedGreen else PoseWarningAmber,
                 modifier = Modifier.fillMaxSize()
@@ -151,27 +156,105 @@ private val SKELETON_CONNECTIONS = listOf(
 @Composable
 fun PoseSkeletonCanvas(
     landmarks: List<NormalizedLandmark>,
-    isFrontCamera: Boolean,
-    boneColor: Color,
+    imageWidth: Int = 480,
+    imageHeight: Int = 640,
+    isFrontCamera: Boolean = true,
+    boneColor: Color = PoseMatchedGreen,
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
+        if (landmarks.isEmpty()) {
+            // Subtle posture wireframe guide while waiting for full-body landmarks
+            val cx = size.width * 0.5f
+            val h = size.height
+            val w = size.width
+            val guideColor = PoseMatchedGreen.copy(alpha = 0.62f)
+            val dash = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+
+            val head = Offset(cx, h * 0.20f)
+            val neck = Offset(cx, h * 0.28f)
+            val lShoulder = Offset(cx - w * 0.17f, h * 0.31f)
+            val rShoulder = Offset(cx + w * 0.17f, h * 0.31f)
+            val lElbow = Offset(cx - w * 0.22f, h * 0.44f)
+            val rElbow = Offset(cx + w * 0.22f, h * 0.44f)
+            val lHip = Offset(cx - w * 0.11f, h * 0.54f)
+            val rHip = Offset(cx + w * 0.11f, h * 0.54f)
+            val lKnee = Offset(cx - w * 0.12f, h * 0.72f)
+            val rKnee = Offset(cx + w * 0.12f, h * 0.72f)
+            val lAnkle = Offset(cx - w * 0.12f, h * 0.88f)
+            val rAnkle = Offset(cx + w * 0.12f, h * 0.88f)
+
+            drawCircle(
+                color = guideColor,
+                radius = w * 0.08f,
+                center = head,
+                style = Stroke(width = 3f, pathEffect = dash)
+            )
+            val guideBones = listOf(
+                neck to lShoulder,
+                neck to rShoulder,
+                lShoulder to rShoulder,
+                lShoulder to lElbow,
+                rShoulder to rElbow,
+                lShoulder to lHip,
+                rShoulder to rHip,
+                lHip to rHip,
+                lHip to lKnee,
+                lKnee to lAnkle,
+                rHip to rKnee,
+                rKnee to rAnkle
+            )
+            guideBones.forEach { (start, end) ->
+                drawLine(
+                    color = guideColor,
+                    start = start,
+                    end = end,
+                    strokeWidth = 3f,
+                    cap = StrokeCap.Round,
+                    pathEffect = dash
+                )
+            }
+            listOf(lShoulder, rShoulder, lHip, rHip, lKnee, rKnee).forEach { pt ->
+                drawCircle(color = guideColor, radius = 4.5f, center = pt)
+            }
+            return@Canvas
+        }
+
+        // Aspect-ratio-aware PreviewView.ScaleType.FILL_CENTER coordinate mapping
+        val srcW = imageWidth.coerceAtLeast(1).toFloat()
+        val srcH = imageHeight.coerceAtLeast(1).toFloat()
+        val scale = max(size.width / srcW, size.height / srcH)
+        val scaledW = srcW * scale
+        val scaledH = srcH * scale
+        val dx = (size.width - scaledW) / 2f
+        val dy = (size.height - scaledH) / 2f
+
         val map = landmarks.associateBy { it.type }
 
         fun toOffset(lm: NormalizedLandmark): Offset {
             val nx = if (isFrontCamera) 1f - lm.x else lm.x
-            return Offset(nx * size.width, lm.y * size.height)
+            return Offset(dx + nx * scaledW, dy + lm.y * scaledH)
         }
 
         for ((startType, endType) in SKELETON_CONNECTIONS) {
             val a = map[startType]
             val b = map[endType]
             if (a != null && b != null && a.inFrameLikelihood > 0.35f && b.inFrameLikelihood > 0.35f) {
+                val p1 = toOffset(a)
+                val p2 = toOffset(b)
+                // Outer halo for visibility on dark/bright camera feeds
                 drawLine(
-                    color = boneColor.copy(alpha = 0.85f),
-                    start = toOffset(a),
-                    end = toOffset(b),
-                    strokeWidth = 6f,
+                    color = boneColor.copy(alpha = 0.35f),
+                    start = p1,
+                    end = p2,
+                    strokeWidth = 10f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = boneColor.copy(alpha = 0.95f),
+                    start = p1,
+                    end = p2,
+                    strokeWidth = 5f,
                     cap = StrokeCap.Round
                 )
             }
@@ -182,12 +265,12 @@ fun PoseSkeletonCanvas(
                 val center = toOffset(lm)
                 drawCircle(
                     color = Color.White,
-                    radius = 7f,
+                    radius = 7.5f,
                     center = center
                 )
                 drawCircle(
                     color = boneColor,
-                    radius = 4.5f,
+                    radius = 4.8f,
                     center = center
                 )
             }

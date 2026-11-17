@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessibilityNew
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
@@ -38,6 +40,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,13 +69,14 @@ import java.util.Locale
 @Composable
 fun LearnScreen(
     uiState: MainUiState,
-    onPlayAudio: (String) -> Unit,
+    onPlayAudio: (String, String) -> Unit,
     onStartTrack: (PrayerTrack) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
     val gender = uiState.settings.gender
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showAiDiagnostics by remember { mutableStateOf(false) }
 
     val tabs = listOf(
         lText("Harakatlar", "Ҳаракатлар").get(script),
@@ -133,6 +137,38 @@ fun LearnScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = lText("Namoz ruknlari", "Намоз рукнлари").get(script),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                            FilterChip(
+                                selected = showAiDiagnostics,
+                                onClick = { showAiDiagnostics = !showAiDiagnostics },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Analytics,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                label = {
+                                    Text(
+                                        text = lText("AI diagnostika", "AI диагностика").get(script),
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                },
+                                modifier = Modifier.testTag("toggle_ai_diagnostics")
+                            )
+                        }
+                    }
+
                     items(PrayerContentCatalog.postureGuides, key = { it.id }) { guide ->
                         Card(
                             shape = RoundedCornerShape(20.dp),
@@ -157,20 +193,22 @@ fun LearnScreen(
                                         text = "${guide.pose.emoji} ${guide.title.get(script)}",
                                         style = MaterialTheme.typography.titleLarge
                                     )
-                                    Surface(
-                                        shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
-                                    ) {
-                                        Text(
-                                            text = guide.angleSpec,
-                                            fontFamily = JetBrainsMonoFontFamily,
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            modifier = Modifier.padding(
-                                                horizontal = 10.dp,
-                                                vertical = 4.dp
+                                    if (showAiDiagnostics) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primaryContainer
+                                        ) {
+                                            Text(
+                                                text = guide.angleSpec,
+                                                fontFamily = JetBrainsMonoFontFamily,
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                modifier = Modifier.padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 4.dp
+                                                )
                                             )
-                                        )
+                                        }
                                     }
                                 }
 
@@ -201,7 +239,7 @@ fun LearnScreen(
                                     horizontalArrangement = Arrangement.End
                                 ) {
                                     FilledTonalButton(
-                                        onClick = { onPlayAudio(guide.ttsPrompt) },
+                                        onClick = { onPlayAudio(guide.ttsPrompt, "") },
                                         modifier = Modifier.testTag("listen_${guide.id}")
                                     ) {
                                         Icon(
@@ -298,7 +336,7 @@ fun LearnScreen(
                                         )
                                     }
                                     FilledTonalButton(
-                                        onClick = { onPlayAudio(surah.ttsPrompt) },
+                                        onClick = { onPlayAudio(surah.ttsPrompt, surah.audioAssetId) },
                                         modifier = Modifier.testTag("listen_surah_${surah.id}")
                                     ) {
                                         Icon(

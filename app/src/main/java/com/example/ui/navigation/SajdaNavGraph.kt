@@ -40,6 +40,7 @@ import com.example.ui.screens.CalibrationScreen
 import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LearnScreen
 import com.example.ui.screens.OnboardingScreen
+import com.example.ui.screens.PermissionsScreen
 import com.example.ui.screens.QiblaScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.WeeklyProgressScreen
@@ -49,6 +50,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data object OnboardingRoute
+
+@Serializable
+data class PermissionsRoute(val fromSettings: Boolean = false)
 
 @Serializable
 data object MainTabsRoute
@@ -91,8 +95,25 @@ fun SajdaNavGraph(
                 initialCityId = mainUiState.settings.selectedCityId,
                 onComplete = { gender, script, cityId ->
                     mainViewModel.completeOnboarding(gender, script, cityId)
-                    navController.navigate(MainTabsRoute) {
+                    navController.navigate(PermissionsRoute(fromSettings = false)) {
                         popUpTo<OnboardingRoute> { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable<PermissionsRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<PermissionsRoute>()
+            PermissionsScreen(
+                script = mainUiState.settings.script,
+                isFromSettings = route.fromSettings,
+                onContinue = {
+                    if (route.fromSettings) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate(MainTabsRoute) {
+                            popUpTo<PermissionsRoute> { inclusive = true }
+                        }
                     }
                 }
             )
@@ -176,7 +197,9 @@ fun SajdaNavGraph(
                     )
                     1 -> LearnScreen(
                         uiState = mainUiState,
-                        onPlayAudio = { prompt -> mainViewModel.speakSample(prompt) },
+                        onPlayAudio = { prompt, assetId ->
+                            mainViewModel.speakSample(prompt, assetId)
+                        },
                         onStartTrack = { track ->
                             navController.navigate(CalibrationRoute(track.id))
                         },
@@ -258,9 +281,20 @@ fun SajdaNavGraph(
                 onGenderChange = mainViewModel::setGender,
                 onScriptChange = mainViewModel::setScript,
                 onCityChange = mainViewModel::setCityId,
-                onGeminiTtsToggle = mainViewModel::setUseGeminiTts,
+                onPreferOfflineMp3Toggle = mainViewModel::setPreferOfflineMp3,
                 onVoiceSpeedChange = mainViewModel::setVoiceSpeed,
                 onDarkThresholdChange = mainViewModel::setDarkRoomThreshold,
+                onSyncCalendarNow = mainViewModel::syncPrayerCalendarNow,
+                onOpenPermissions = {
+                    navController.navigate(PermissionsRoute(fromSettings = true))
+                },
+                onTestAudio = {
+                    val sample = lText(
+                        "Assalomu alaykum. Oflayn Qori qiroati tayyor.",
+                        "Ассалому алайкум. Офлайн Қори қироати тайёр."
+                    ).get(mainUiState.settings.script)
+                    mainViewModel.speakSample(sample, "fotiha")
+                },
                 onBack = { navController.popBackStack() }
             )
         }
