@@ -211,11 +211,15 @@ fun SajdaNavGraph(
                         onTogglePrayerForDay = mainViewModel::togglePrayerCompletedForDay,
                         modifier = Modifier.padding(innerPadding)
                     )
-                    else -> QiblaScreen(
-                        uiState = mainUiState,
-                        onDetectNearestCity = { mainViewModel.detectNearestCityFromCoarseLocation() },
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                    else -> {
+                        val compassState by mainViewModel.compassUiState.collectAsStateWithLifecycle()
+                        QiblaScreen(
+                            uiState = mainUiState,
+                            compassState = compassState,
+                            onDetectNearestCity = { mainViewModel.detectNearestCityFromCoarseLocation() },
+                            modifier = Modifier.padding(innerPadding)
+                        )
+                    }
                 }
             }
         }

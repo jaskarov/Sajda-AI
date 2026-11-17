@@ -9,10 +9,17 @@
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
 .DS_Store
+.vscode/
+.antigravity/
 /build
 /captures
 .externalNativeBuild
 .cxx
 local.properties
 .env
+.env.*
+!.env.example
+*.jks
+*.keystore
 debug.keystore
+google-services.json

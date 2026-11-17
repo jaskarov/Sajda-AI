@@ -12,6 +12,7 @@ import com.example.domain.model.PrayerTimeSlot
 import com.example.domain.model.PrayerType
 import com.example.domain.model.UzbekCity
 import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 /**
@@ -167,7 +168,7 @@ class PrayerWorkScheduler(
         slot: PrayerTimeSlot,
         addDays: Int
     ): Long {
-        return Calendar.getInstance().apply {
+        return Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply {
             timeInMillis = baseMillis
             if (addDays != 0) {
                 add(Calendar.DAY_OF_MONTH, addDays)

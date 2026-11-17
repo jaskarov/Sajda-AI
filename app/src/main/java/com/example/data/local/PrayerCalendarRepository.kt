@@ -17,6 +17,7 @@ import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Calendar
+import java.util.TimeZone
 
 @Serializable
 private data class BundledCalendarPayload(
@@ -130,7 +131,7 @@ class PrayerCalendarRepository(
         cityId: String,
         nowMillis: Long = System.currentTimeMillis()
     ): Flow<Pair<PrayerCalendarDayEntity?, PrayerCalendarDayEntity?>> {
-        val todayCal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        val todayCal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply { timeInMillis = nowMillis }
         val tomorrowCal = (todayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
 
         val todayFlow = dao.observeDay(
@@ -157,7 +158,7 @@ class PrayerCalendarRepository(
         nowMillis: Long = System.currentTimeMillis()
     ): Pair<PrayerCalendarDayEntity?, PrayerCalendarDayEntity?> {
         ensureSeededFromAssets()
-        val todayCal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        val todayCal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply { timeInMillis = nowMillis }
         val tomorrowCal = (todayCal.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }
         val today = dao.getDay(
             cityId = cityId,
@@ -182,7 +183,7 @@ class PrayerCalendarRepository(
         if (!isNetworkConnected()) return@withContext false
 
         val city = UzbekistanCities.findById(cityId)
-        val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply { timeInMillis = nowMillis }
         val currentYear = cal.get(Calendar.YEAR)
         val currentMonth = cal.get(Calendar.MONTH) + 1
         val nextCal = (cal.clone() as Calendar).apply { add(Calendar.MONTH, 1) }

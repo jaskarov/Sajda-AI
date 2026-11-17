@@ -297,8 +297,8 @@ class PrayerPoseAnalyzer(
             return PrayerPose.QADA
         }
 
-        // 3. Ruku check: torso bent forward (70..120), knees straight (>152)
-        if (torsoAngle in 68f..120f && kneeAngle >= 152f) {
+        // 3. Ruku check: torso bent forward (55..125), knees extended (>= 140 to accommodate Hanafi female posture)
+        if (torsoAngle in 55f..125f && kneeAngle >= 140f) {
             return PrayerPose.RUKU
         }
 

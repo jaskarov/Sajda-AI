@@ -4,6 +4,7 @@ import com.example.data.local.DailyPrayerProgressEntity
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.roundToInt
 
 enum class WeeklyChartMode {
@@ -106,10 +107,11 @@ object WeeklyPrayerAnalytics {
         weekOffset: Int = 0,
         referenceTimeMillis: Long = System.currentTimeMillis()
     ): WeeklyPrayerSummary {
-        val keyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val shortDateFmt = SimpleDateFormat("dd.MM", Locale.US)
+        val tz = TimeZone.getTimeZone("Asia/Tashkent")
+        val keyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }
+        val shortDateFmt = SimpleDateFormat("dd.MM", Locale.US).apply { timeZone = tz }
 
-        val todayCal = Calendar.getInstance().apply {
+        val todayCal = Calendar.getInstance(tz).apply {
             timeInMillis = referenceTimeMillis
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -192,7 +194,8 @@ object WeeklyPrayerAnalytics {
     }
 
     private fun mondayOfWeek(weekOffset: Int, referenceTimeMillis: Long): Calendar {
-        return Calendar.getInstance().apply {
+        val tz = TimeZone.getTimeZone("Asia/Tashkent")
+        return Calendar.getInstance(tz).apply {
             timeInMillis = referenceTimeMillis
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)

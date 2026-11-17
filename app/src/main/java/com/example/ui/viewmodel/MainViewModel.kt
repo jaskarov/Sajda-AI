@@ -41,6 +41,12 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class CompassUiState(
+    val compassAzimuth: Float = 0f,
+    val compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
+    val hasCompassSensor: Boolean = true
+)
+
 data class MainUiState(
     val settings: UserSettings = UserSettings(),
     val schedule: PrayerScheduleSummary? = null,
@@ -108,8 +114,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+    private val currentDayKeyFlow = tickerFlow
+        .map { PrayerHistoryRepository.formatDayKey(java.util.Date(it)) }
+        .distinctUntilChanged()
+
     private val databaseFlows = combine(
-        historyRepo.observeTodayProgress(),
+        historyRepo.observeTodayProgress(currentDayKeyFlow),
         historyRepo.recentDailyProgress,
         historyRepo.recentHistory,
         weeklySummaryFlow,
@@ -127,9 +137,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = combine(
         prefsRepo.settingsFlow,
         databaseFlows,
-        tickerFlow,
-        compassSensor.readingsFlow()
-    ) { settings, dbBundle, nowMillis, compassReading ->
+        tickerFlow
+    ) { settings, dbBundle, nowMillis ->
         val city = UzbekistanCities.findById(settings.selectedCityId)
         val schedule = getPrayerTimesUseCase.calculateForToday(
             city = city,
@@ -139,13 +148,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             todayCalendarDay = dbBundle.calendarBundle.todayDay,
             tomorrowCalendarDay = dbBundle.calendarBundle.tomorrowDay
         )
-        val declination = GeomagneticField(
-            city.latitude.toFloat(),
-            city.longitude.toFloat(),
-            400f,
-            nowMillis
-        ).declination
-        val trueAzimuth = ((compassReading.magneticAzimuthDegrees + declination) % 360f + 360f) % 360f
 
         MainUiState(
             settings = settings,
@@ -154,9 +156,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             dailyProgressHistory = dbBundle.dailyProgressHistory,
             weeklySummary = dbBundle.weeklySummary,
             history = dbBundle.sessionHistory,
-            compassAzimuth = trueAzimuth,
-            compassAccuracy = compassReading.accuracy,
-            hasCompassSensor = compassReading.hasSensor,
+            compassAzimuth = 0f,
+            compassAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
+            hasCompassSensor = true,
             audioStatus = audioCoach.status.value,
             calendarSource = dbBundle.calendarBundle.todayDay?.source ?: "uz_taqvim_365",
             lastCalendarSyncMillis = dbBundle.calendarBundle.latestSyncMillis,
@@ -168,6 +170,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         started = SharingStarted.WhileSubscribed(5000L),
         initialValue = MainUiState()
     )
+
+    val compassUiState: StateFlow<CompassUiState> = prefsRepo.settingsFlow
+        .map { it.selectedCityId }
+        .distinctUntilChanged()
+        .flatMapLatest { cityId ->
+            val city = UzbekistanCities.findById(cityId)
+            compassSensor.readingsFlow().map { reading ->
+                val declination = GeomagneticField(
+                    city.latitude.toFloat(),
+                    city.longitude.toFloat(),
+                    400f,
+                    System.currentTimeMillis()
+                ).declination
+                val trueAzimuth = ((reading.magneticAzimuthDegrees + declination) % 360f + 360f) % 360f
+                CompassUiState(
+                    compassAzimuth = trueAzimuth,
+                    compassAccuracy = reading.accuracy,
+                    hasCompassSensor = reading.hasSensor
+                )
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000L),
+            initialValue = CompassUiState()
+        )
 
     init {
         viewModelScope.launch {

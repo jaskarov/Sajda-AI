@@ -1,31 +1,58 @@
 package com.example.data.local
 
 import com.example.domain.model.PrayerType
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PrayerHistoryRepository(
     private val historyDao: PrayerHistoryDao,
     private val dailyProgressDao: DailyPrayerProgressDao
 ) {
+
+    companion object {
+        val TASHKENT_TIME_ZONE: TimeZone = TimeZone.getTimeZone("Asia/Tashkent")
+
+        fun formatDayKey(date: Date = Date(), timeZone: TimeZone = TASHKENT_TIME_ZONE): String {
+            return SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                this.timeZone = timeZone
+            }.format(date)
+        }
+    }
 
     val recentHistory: Flow<List<PrayerHistoryEntity>> = historyDao.getRecentHistory()
 
     val recentDailyProgress: Flow<List<DailyPrayerProgressEntity>> =
         dailyProgressDao.observeRecentDays(limit = 30)
 
-    fun observeTodayProgress(): Flow<DailyPrayerProgressEntity> {
-        val key = todayKey()
-        return dailyProgressDao.observeDay(key).map { entity ->
-            entity ?: DailyPrayerProgressEntity(dayKey = key)
+    fun observeTodayProgress(dayKeyFlow: Flow<String>? = null): Flow<DailyPrayerProgressEntity> {
+        return if (dayKeyFlow != null) {
+            dayKeyFlow.distinctUntilChanged().flatMapLatest { key ->
+                dailyProgressDao.observeDay(key).map { entity ->
+                    entity ?: DailyPrayerProgressEntity(dayKey = key)
+                }
+            }
+        } else {
+            flow {
+                emit(todayKey())
+            }.flatMapLatest { key ->
+                dailyProgressDao.observeDay(key).map { entity ->
+                    entity ?: DailyPrayerProgressEntity(dayKey = key)
+                }
+            }
         }
     }
 
-    fun getCompletedTodayFlow(): Flow<Set<PrayerType>> {
-        return observeTodayProgress().map { it.completedTypes() }
+    fun getCompletedTodayFlow(dayKeyFlow: Flow<String>? = null): Flow<Set<PrayerType>> {
+        return observeTodayProgress(dayKeyFlow).map { it.completedTypes() }
     }
 
     fun observeDaysInRange(
@@ -75,6 +102,5 @@ class PrayerHistoryRepository(
 
     suspend fun deleteEntry(id: Long) = historyDao.deleteById(id)
 
-    private fun todayKey(): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    fun todayKey(): String = formatDayKey()
 }

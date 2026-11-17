@@ -7,6 +7,7 @@ import com.example.domain.model.UzbekCity
 import com.example.domain.model.lText
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan
@@ -30,7 +31,7 @@ class GetPrayerTimesUseCase {
         todayCalendarDay: com.example.data.local.PrayerCalendarDayEntity? = null,
         tomorrowCalendarDay: com.example.data.local.PrayerCalendarDayEntity? = null
     ): PrayerScheduleSummary {
-        val cal = Calendar.getInstance().apply { timeInMillis = nowMillis }
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply { timeInMillis = nowMillis }
         val year = cal.get(Calendar.YEAR)
         val month = cal.get(Calendar.MONTH) + 1
         val day = cal.get(Calendar.DAY_OF_MONTH)

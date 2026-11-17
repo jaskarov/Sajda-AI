@@ -6,6 +6,8 @@ import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
@@ -78,7 +80,14 @@ class PrayerAudioCoach(private val context: Context) {
     }
 
     private fun initExoPlayer() {
-        exoPlayer = ExoPlayer.Builder(context.applicationContext).build().apply {
+        val audioAttributes = AudioAttributes.Builder()
+            .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+            .setUsage(C.USAGE_MEDIA)
+            .build()
+
+        exoPlayer = ExoPlayer.Builder(context.applicationContext)
+            .setAudioAttributes(audioAttributes, true)
+            .build().apply {
             addListener(object : Player.Listener {
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _isPlaying.value = isPlaying

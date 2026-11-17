@@ -76,6 +76,7 @@ import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.theme.PoseWarningAmber
 import com.example.ui.theme.SaffronGold
 import com.example.ui.viewmodel.MainUiState
+import com.example.ui.viewmodel.CompassUiState
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -84,6 +85,7 @@ import kotlin.math.sin
 @Composable
 fun QiblaScreen(
     uiState: MainUiState,
+    compassState: CompassUiState = CompassUiState(),
     onDetectNearestCity: () -> String?,
     modifier: Modifier = Modifier
 ) {
@@ -93,7 +95,7 @@ fun QiblaScreen(
     val schedule = uiState.schedule ?: return
 
     val qiblaBearing = schedule.qiblaBearingDegrees.toFloat()
-    val azimuth = uiState.compassAzimuth
+    val azimuth = compassState.compassAzimuth
     val displayQiblaDeg = ((qiblaBearing.roundToInt() % 360) + 360) % 360
     val displayAzimuthDeg = ((azimuth.roundToInt() % 360) + 360) % 360
 
@@ -544,8 +546,8 @@ fun QiblaScreen(
                 }
             }
 
-            if (uiState.hasCompassSensor &&
-                uiState.compassAccuracy <= SensorManager.SENSOR_STATUS_ACCURACY_LOW
+            if (compassState.hasCompassSensor &&
+                compassState.compassAccuracy <= SensorManager.SENSOR_STATUS_ACCURACY_LOW
             ) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
@@ -617,7 +619,7 @@ fun QiblaScreen(
                 )
             }
 
-            if (!uiState.hasCompassSensor) {
+            if (!compassState.hasCompassSensor) {
                 Text(
                     text = lText(
                         "Ushbu qurilmada magnitometr sensori aniqlanmadi. Yuqoridagi Qibla burchagidan foydalaning.",
