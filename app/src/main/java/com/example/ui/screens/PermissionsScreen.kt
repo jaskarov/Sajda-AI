@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
@@ -98,6 +99,17 @@ fun PermissionsScreen(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    val locationGranted = remember(refreshTick) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+    }
+
     val notificationsGranted = remember(refreshTick) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             ContextCompat.checkSelfPermission(
@@ -133,6 +145,10 @@ fun PermissionsScreen(
     val requestStandardPermissions = {
         val toRequest = buildList {
             if (!cameraGranted) add(Manifest.permission.CAMERA)
+            if (!locationGranted) {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsGranted) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
             }
@@ -256,7 +272,29 @@ fun PermissionsScreen(
                 testTag = "permission_camera_button"
             )
 
-            // 2. Notification permission (Android 13+)
+            // 2. Geolocation permission
+            PermissionCard(
+                icon = Icons.Default.LocationOn,
+                title = lText("Joylashuv (GPS / Shahar)", "Жойлашув (GPS / Шаҳар)").get(script),
+                description = lText(
+                    "Eng yaqin shahar namoz vaqtlarini va Qibla burchagini aniqlash uchun kerak.",
+                    "Энг яқин шаҳар намоз вақтларини ва Қибла бурчагини аниқлаш учун керак."
+                ).get(script),
+                granted = locationGranted,
+                actionLabel = lText("Joylashuvga ruxsat berish", "Жойлашувга рухсат бериш").get(script),
+                onAction = {
+                    runtimePermsLauncher.launch(
+                        arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        )
+                    )
+                },
+                script = script,
+                testTag = "permission_location_button"
+            )
+
+            // 3. Notification permission (Android 13+)
             PermissionCard(
                 icon = Icons.Default.NotificationsActive,
                 title = lText("Bildirishnomalar (Android 13+)", "Билдиришномалар (Android 13+)").get(script),
@@ -275,7 +313,7 @@ fun PermissionsScreen(
                 testTag = "permission_notifications_button"
             )
 
-            // 3. Exact Alarm permission (Android 12+)
+            // 4. Exact Alarm permission (Android 12+)
             PermissionCard(
                 icon = Icons.Default.Alarm,
                 title = lText("Aniq vaqtdagi azon signali", "Аниқ вақтдаги азон сигнали").get(script),
@@ -290,7 +328,7 @@ fun PermissionsScreen(
                 testTag = "permission_exact_alarm_button"
             )
 
-            if (!cameraGranted || !notificationsGranted) {
+            if (!cameraGranted || !locationGranted || !notificationsGranted) {
                 OutlinedButton(
                     onClick = requestStandardPermissions,
                     modifier = Modifier
@@ -301,8 +339,8 @@ fun PermissionsScreen(
                 ) {
                     Text(
                         text = lText(
-                            "Kamera va bildirishnomani birga so‘rash",
-                            "Камера ва билдиришномани бирга сўраш"
+                            "Barcha standart ruxsatlarni so‘rash",
+                            "Барча стандарт рухсатларни сўраш"
                         ).get(script),
                         fontWeight = FontWeight.SemiBold
                     )
@@ -323,7 +361,7 @@ fun PermissionsScreen(
                 Text(
                     text = if (isFromSettings) {
                         lText("Saqlash va qaytish", "Сақлаш ва қайтиш").get(script)
-                    } else if (cameraGranted && notificationsGranted && exactAlarmGranted) {
+                    } else if (cameraGranted && locationGranted && notificationsGranted && exactAlarmGranted) {
                         lText("Ilovaga kirish", "Иловага кириш").get(script)
                     } else {
                         lText("Davom etish (Keyinroq ham sozlash mumkin)", "Давом этиш (Кейинроқ ҳам созлаш мумкин)")

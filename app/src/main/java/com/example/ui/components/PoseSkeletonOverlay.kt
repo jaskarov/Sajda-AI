@@ -1,10 +1,12 @@
 package com.example.ui.components
 
+import android.util.Log
 import android.util.Size
 import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -34,6 +36,8 @@ import com.google.mlkit.vision.pose.PoseLandmark
 import java.util.concurrent.Executors
 import kotlin.math.max
 
+private const val TAG_CAMERA = "CameraPosePreview"
+
 @Composable
 fun CameraPosePreview(
     darkLuminanceThreshold: Float,
@@ -41,7 +45,8 @@ fun CameraPosePreview(
     modifier: Modifier = Modifier,
     poseSnapshot: PoseAnalysisSnapshot = PoseAnalysisSnapshot(),
     showSkeleton: Boolean = true,
-    isMatched: Boolean = false
+    isMatched: Boolean = false,
+    enabled: Boolean = true
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -65,56 +70,85 @@ fun CameraPosePreview(
         }
     }
 
-    DisposableEffect(lifecycleOwner, analyzer) {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-        var boundProvider: ProcessCameraProvider? = null
-
-        cameraProviderFuture.addListener({
-            runCatching {
-                val cameraProvider = cameraProviderFuture.get()
-                boundProvider = cameraProvider
-
-                val preview = Preview.Builder().build().also {
-                    it.surfaceProvider = previewView.surfaceProvider
-                }
-
-                val resolutionSelector = ResolutionSelector.Builder()
-                    .setResolutionStrategy(
-                        ResolutionStrategy(
-                            Size(480, 640),
-                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
-                        )
-                    )
-                    .build()
-
-                val imageAnalysis = ImageAnalysis.Builder()
-                    .setResolutionSelector(resolutionSelector)
-                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .build()
-                    .also { analysis ->
-                        analysis.setAnalyzer(analysisExecutor, analyzer)
-                    }
-
-                val cameraSelector = if (cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) {
-                    CameraSelector.DEFAULT_FRONT_CAMERA
-                } else {
-                    CameraSelector.DEFAULT_BACK_CAMERA
-                }
-
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageAnalysis
-                )
-            }
-        }, ContextCompat.getMainExecutor(context))
-
+    DisposableEffect(Unit) {
         onDispose {
-            boundProvider?.unbindAll()
             analyzer.close()
             analysisExecutor.shutdown()
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, analyzer, enabled) {
+        if (!enabled) {
+            onDispose { }
+        } else {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+            var boundProvider: ProcessCameraProvider? = null
+            var boundUseCases: Array<UseCase> = emptyArray()
+            var isDisposed = false
+            val mainExecutor = ContextCompat.getMainExecutor(context)
+
+            fun bindCamera(retryOnFailure: Boolean) {
+                if (isDisposed) return
+                runCatching {
+                    val cameraProvider = cameraProviderFuture.get()
+                    if (isDisposed) return@runCatching
+                    boundProvider = cameraProvider
+
+                    val preview = Preview.Builder().build().also {
+                        it.surfaceProvider = previewView.surfaceProvider
+                    }
+
+                    val resolutionSelector = ResolutionSelector.Builder()
+                        .setResolutionStrategy(
+                            ResolutionStrategy(
+                                Size(480, 640),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                            )
+                        )
+                        .build()
+
+                    val imageAnalysis = ImageAnalysis.Builder()
+                        .setResolutionSelector(resolutionSelector)
+                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                        .build()
+                        .also { analysis ->
+                            analysis.setAnalyzer(analysisExecutor, analyzer)
+                        }
+
+                    val useFront = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                    analyzer.isFrontCamera = useFront
+                    val cameraSelector = if (useFront) {
+                        CameraSelector.DEFAULT_FRONT_CAMERA
+                    } else {
+                        CameraSelector.DEFAULT_BACK_CAMERA
+                    }
+
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                    boundUseCases = arrayOf(preview, imageAnalysis)
+                }.onFailure { err ->
+                    Log.w(TAG_CAMERA, "Camera bind failed (retry=$retryOnFailure)", err)
+                    if (retryOnFailure && !isDisposed) {
+                        previewView.postDelayed({ bindCamera(retryOnFailure = false) }, 180L)
+                    }
+                }
+            }
+
+            cameraProviderFuture.addListener({ bindCamera(retryOnFailure = true) }, mainExecutor)
+
+            onDispose {
+                isDisposed = true
+                // Unbind ONLY this preview's own UseCases so transitioning screens never
+                // kills the incoming screen's newly bound camera session.
+                if (boundUseCases.isNotEmpty()) {
+                    runCatching { boundProvider?.unbind(*boundUseCases) }
+                }
+            }
         }
     }
 
@@ -153,6 +187,22 @@ private val SKELETON_CONNECTIONS = listOf(
     PoseLandmark.NOSE to PoseLandmark.RIGHT_SHOULDER
 )
 
+private val SKELETON_JOINT_TYPES = setOf(
+    PoseLandmark.NOSE,
+    PoseLandmark.LEFT_SHOULDER,
+    PoseLandmark.RIGHT_SHOULDER,
+    PoseLandmark.LEFT_ELBOW,
+    PoseLandmark.RIGHT_ELBOW,
+    PoseLandmark.LEFT_WRIST,
+    PoseLandmark.RIGHT_WRIST,
+    PoseLandmark.LEFT_HIP,
+    PoseLandmark.RIGHT_HIP,
+    PoseLandmark.LEFT_KNEE,
+    PoseLandmark.RIGHT_KNEE,
+    PoseLandmark.LEFT_ANKLE,
+    PoseLandmark.RIGHT_ANKLE
+)
+
 @Composable
 fun PoseSkeletonCanvas(
     landmarks: List<NormalizedLandmark>,
@@ -164,7 +214,6 @@ fun PoseSkeletonCanvas(
 ) {
     Canvas(modifier = modifier) {
         if (landmarks.isEmpty()) {
-            // Subtle posture wireframe guide while waiting for full-body landmarks
             val cx = size.width * 0.5f
             val h = size.height
             val w = size.width
@@ -242,7 +291,6 @@ fun PoseSkeletonCanvas(
             if (a != null && b != null && a.inFrameLikelihood > 0.35f && b.inFrameLikelihood > 0.35f) {
                 val p1 = toOffset(a)
                 val p2 = toOffset(b)
-                // Outer halo for visibility on dark/bright camera feeds
                 drawLine(
                     color = boneColor.copy(alpha = 0.35f),
                     start = p1,
@@ -261,7 +309,7 @@ fun PoseSkeletonCanvas(
         }
 
         landmarks.forEach { lm ->
-            if (lm.inFrameLikelihood > 0.45f) {
+            if (lm.type in SKELETON_JOINT_TYPES && lm.inFrameLikelihood > 0.40f) {
                 val center = toOffset(lm)
                 drawCircle(
                     color = Color.White,

@@ -32,7 +32,7 @@ import kotlin.math.atan2
  * - 400ms debounce filter before confirming Qiyom, Takbir, Ruku, Sajda, or Qada states.
  */
 class PrayerPoseAnalyzer(
-    private val isFrontCamera: Boolean = true,
+    @Volatile var isFrontCamera: Boolean = true,
     private val darkLuminanceThreshold: Float = 28f,
     private val onPoseResult: (PoseAnalysisSnapshot) -> Unit
 ) : ImageAnalysis.Analyzer {

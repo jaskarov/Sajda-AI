@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.example.LocalRuntimePermissions
 import com.example.domain.model.CoachMode
 import com.example.domain.model.FallbackReason
 import com.example.domain.model.lText
@@ -73,6 +77,7 @@ import com.example.ui.theme.PoseWarningAmber
 import com.example.ui.theme.SaffronGold
 import com.example.ui.viewmodel.PrayerCoachUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun CalibrationScreen(
@@ -96,15 +101,34 @@ fun CalibrationScreen(
         }
     }
 
-    var hasCameraPermission by remember {
+    val runtimePermissions = LocalRuntimePermissions.current
+    var hasCameraPermission by remember(runtimePermissions.cameraGranted) {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(
+            runtimePermissions.cameraGranted || ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.CAMERA
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        hasCameraPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+    }
     var permissionRequested by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope()
+    var releasingForTransition by remember { mutableStateOf(false) }
+
+    fun navigateToSession(mode: CoachMode, reason: FallbackReason) {
+        if (releasingForTransition) return
+        releasingForTransition = true
+        coroutineScope.launch {
+            delay(80L)
+            onStartActiveSession(mode, reason)
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -112,7 +136,7 @@ fun CalibrationScreen(
         hasCameraPermission = granted
         permissionRequested = true
         if (!granted) {
-            onStartActiveSession(CoachMode.AUDIO_ONLY, FallbackReason.CAMERA_PERMISSION_DENIED)
+            navigateToSession(CoachMode.AUDIO_ONLY, FallbackReason.CAMERA_PERMISSION_DENIED)
         }
     }
 
@@ -124,9 +148,9 @@ fun CalibrationScreen(
 
     // Automatic fallback when room is too dark
     LaunchedEffect(uiState.poseSnapshot.isLowLight) {
-        if (hasCameraPermission && uiState.poseSnapshot.isLowLight) {
+        if (hasCameraPermission && uiState.poseSnapshot.isLowLight && !releasingForTransition) {
             delay(900L)
-            onStartActiveSession(CoachMode.AUDIO_ONLY, FallbackReason.LOW_LIGHT_DARK_ROOM)
+            navigateToSession(CoachMode.AUDIO_ONLY, FallbackReason.LOW_LIGHT_DARK_ROOM)
         }
     }
 
@@ -139,7 +163,7 @@ fun CalibrationScreen(
                 "Joyingiz qulay! Boshlaymiz. Qo'llaringizni ko'tarib Allohu akbar deng."
             )
             delay(2800L)
-            onStartActiveSession(CoachMode.CAMERA_AI, FallbackReason.NONE)
+            navigateToSession(CoachMode.CAMERA_AI, FallbackReason.NONE)
         }
     }
 
@@ -166,6 +190,7 @@ fun CalibrationScreen(
                 poseSnapshot = uiState.poseSnapshot,
                 showSkeleton = true,
                 isMatched = isReady,
+                enabled = !releasingForTransition,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -356,7 +381,7 @@ fun CalibrationScreen(
             ) {
                 OutlinedButton(
                     onClick = {
-                        onStartActiveSession(CoachMode.AUDIO_ONLY, FallbackReason.USER_SELECTED)
+                        navigateToSession(CoachMode.AUDIO_ONLY, FallbackReason.USER_SELECTED)
                     },
                     modifier = Modifier
                         .weight(1f)
@@ -383,7 +408,7 @@ fun CalibrationScreen(
                         val mode = if (hasCameraPermission) CoachMode.CAMERA_AI else CoachMode.AUDIO_ONLY
                         val reason = if (hasCameraPermission) FallbackReason.NONE
                         else FallbackReason.CAMERA_PERMISSION_DENIED
-                        onStartActiveSession(mode, reason)
+                        navigateToSession(mode, reason)
                     },
                     modifier = Modifier
                         .weight(1f)

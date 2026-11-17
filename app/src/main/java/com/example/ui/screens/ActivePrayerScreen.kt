@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.LocalRuntimePermissions
 import com.example.audio.AudioCoachStatus
 import com.example.domain.model.CoachMode
 import com.example.domain.model.FallbackReason
@@ -121,10 +122,12 @@ fun ActivePrayerScreen(
     }
 
     val step = uiState.currentStep ?: return
-    val hasCameraPermission = ContextCompat.checkSelfPermission(
-        context,
-        Manifest.permission.CAMERA
-    ) == PackageManager.PERMISSION_GRANTED
+    val runtimePermissions = LocalRuntimePermissions.current
+    val hasCameraPermission = runtimePermissions.cameraGranted ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
 
     val detectedPose = uiState.poseSnapshot.confirmedPose
     val isPoseAligned = detectedPose == step.expectedPose
