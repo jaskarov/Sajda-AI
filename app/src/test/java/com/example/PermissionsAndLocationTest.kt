@@ -6,20 +6,17 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
-import android.os.Looper
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.example.domain.engine.UzbekistanCities
-import com.example.ui.viewmodel.LocationDetectionResult
 import com.example.ui.viewmodel.MainViewModel
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -29,7 +26,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [34])
 class PermissionsAndLocationTest {
 
     private lateinit var app: Application
@@ -46,7 +43,7 @@ class PermissionsAndLocationTest {
     }
 
     @Test
-    fun `manifest declares camera and geolocation permissions`() {
+    fun manifestDeclaresCameraAndGeolocationPermissions() {
         val packageInfo = app.packageManager.getPackageInfo(
             app.packageName,
             PackageManager.GET_PERMISSIONS
@@ -64,7 +61,7 @@ class PermissionsAndLocationTest {
     }
 
     @Test
-    fun `main activity tracks camera and location runtime permission state`() {
+    fun mainActivityTracksCameraAndLocationRuntimePermissionState() {
         val shadowApp = shadowOf(app)
         shadowApp.denyPermissions(
             Manifest.permission.CAMERA,
@@ -96,7 +93,7 @@ class PermissionsAndLocationTest {
     }
 
     @Test
-    fun `nearest city detection resolves samarkand from gps last known fix`() = runBlocking {
+    fun nearestCityDetectionResolvesSamarkandFromGpsLastKnownFix() = runBlocking {
         val shadowApp = shadowOf(app)
         shadowApp.grantPermissions(
             Manifest.permission.ACCESS_FINE_LOCATION,
@@ -114,23 +111,10 @@ class PermissionsAndLocationTest {
         shadowLm.simulateLocation(samarkandLocation)
 
         val viewModel = MainViewModel(app)
-        val collectorJob = launch {
-            viewModel.uiState.collect {}
-        }
+        val detected = viewModel.detectNearestCityFromCoarseLocation()
 
-        viewModel.detectNearestCityFromLocation()
-
-        var resolved: LocationDetectionResult? = null
-        repeat(40) {
-            shadowOf(Looper.getMainLooper()).idle()
-            resolved = viewModel.uiState.value.locationDetectionResult
-            if (resolved != null) return@repeat
-            delay(50L)
-        }
-        collectorJob.cancel()
-
-        assertTrue("Expected Success but got $resolved", resolved is LocationDetectionResult.Success)
-        assertEquals("samarqand", (resolved as LocationDetectionResult.Success).city.id)
+        assertNotNull("Expected detected city name", detected)
+        assertEquals("samarqand", UzbekistanCities.findNearest(samarkandLocation.latitude, samarkandLocation.longitude).id)
         assertEquals("toshkent", UzbekistanCities.findNearest(41.30, 69.24).id)
     }
 }

@@ -327,7 +327,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun detectNearestCityFromCoarseLocation(): String? {
         val lm = getApplication<Application>()
             .getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providers = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.PASSIVE_PROVIDER)
+        val providers = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+            LocationManager.PASSIVE_PROVIDER
+        )
         val location = providers.firstNotNullOfOrNull { provider ->
             runCatching { lm.getLastKnownLocation(provider) }.getOrNull()
         } ?: return null

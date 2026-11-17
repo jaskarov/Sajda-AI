@@ -18,6 +18,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -80,87 +81,97 @@ class PrayerAudioCoach(private val context: Context) {
     }
 
     private fun initExoPlayer() {
-        val audioAttributes = AudioAttributes.Builder()
-            .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
-            .setUsage(C.USAGE_MEDIA)
-            .build()
+        runCatching {
+            val audioAttributes = AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+                .setUsage(C.USAGE_MEDIA)
+                .build()
 
-        exoPlayer = ExoPlayer.Builder(context.applicationContext)
-            .setAudioAttributes(audioAttributes, true)
-            .build().apply {
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    _isPlaying.value = isPlaying
-                    if (isPlaying) {
-                        startProgressPolling()
-                    } else {
-                        progressJob?.cancel()
-                    }
-                }
+            exoPlayer = ExoPlayer.Builder(context.applicationContext)
+                .setAudioAttributes(audioAttributes, true)
+                .build().apply {
+                    addListener(object : Player.Listener {
+                        override fun onIsPlayingChanged(isPlaying: Boolean) {
+                            _isPlaying.value = isPlaying
+                            if (isPlaying) {
+                                startProgressPolling()
+                            } else {
+                                progressJob?.cancel()
+                            }
+                        }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_ENDED) {
-                        _isPlaying.value = false
-                        _playbackProgress.value = 1f
-                        progressJob?.cancel()
-                        onPlaybackCompletedCallback?.invoke()
-                    }
+                        override fun onPlaybackStateChanged(playbackState: Int) {
+                            if (playbackState == Player.STATE_ENDED) {
+                                _isPlaying.value = false
+                                _playbackProgress.value = 1f
+                                progressJob?.cancel()
+                                onPlaybackCompletedCallback?.invoke()
+                            }
+                        }
+                    })
                 }
-            })
+        }.onFailure { err ->
+            Log.w(TAG, "ExoPlayer initialization failed (fallback to TTS only)", err)
+            exoPlayer = null
         }
     }
 
     private fun initLocalTts() {
-        localTts = TextToSpeech(context.applicationContext) { statusCode ->
-            if (statusCode == TextToSpeech.SUCCESS) {
-                val engine = localTts
-                if (engine != null) {
-                    val candidates = listOf(
-                        Locale.forLanguageTag("uz-UZ"),
-                        Locale.forLanguageTag("tr-TR"),
-                        Locale.ENGLISH,
-                        Locale.getDefault()
-                    )
-                    for (locale in candidates) {
-                        val availability = engine.isLanguageAvailable(locale)
-                        if (availability >= TextToSpeech.LANG_AVAILABLE) {
-                            engine.language = locale
-                            break
+        runCatching {
+            localTts = TextToSpeech(context.applicationContext) { statusCode ->
+                if (statusCode == TextToSpeech.SUCCESS) {
+                    val engine = localTts
+                    if (engine != null) {
+                        val candidates = listOf(
+                            Locale.forLanguageTag("uz-UZ"),
+                            Locale.forLanguageTag("tr-TR"),
+                            Locale.ENGLISH,
+                            Locale.getDefault()
+                        )
+                        for (locale in candidates) {
+                            val availability = engine.isLanguageAvailable(locale)
+                            if (availability >= TextToSpeech.LANG_AVAILABLE) {
+                                engine.language = locale
+                                break
+                            }
+                        }
+                        isLocalTtsReady = true
+                    }
+                } else {
+                    Log.w(TAG, "Device TextToSpeech engine unavailable (code=$statusCode)")
+                }
+            }
+            localTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {
+                    _isPlaying.value = true
+                }
+
+                override fun onDone(utteranceId: String?) {
+                    scope.launch {
+                        if (utteranceId == activeUtteranceId && !isPaused) {
+                            activeUtteranceId = null
+                            progressJob?.cancel()
+                            _isPlaying.value = false
+                            _playbackProgress.value = 1f
+                            onPlaybackCompletedCallback?.invoke()
                         }
                     }
-                    isLocalTtsReady = true
                 }
-            } else {
-                Log.w(TAG, "Device TextToSpeech engine unavailable (code=$statusCode)")
-            }
+
+                @Deprecated("Deprecated in Java")
+                override fun onError(utteranceId: String?) {
+                    scope.launch {
+                        if (utteranceId == activeUtteranceId) {
+                            activeUtteranceId = null
+                            _isPlaying.value = false
+                        }
+                    }
+                }
+            })
+        }.onFailure { err ->
+            Log.w(TAG, "TextToSpeech init failed", err)
+            localTts = null
         }
-        localTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                _isPlaying.value = true
-            }
-
-            override fun onDone(utteranceId: String?) {
-                scope.launch {
-                    if (utteranceId == activeUtteranceId && !isPaused) {
-                        activeUtteranceId = null
-                        progressJob?.cancel()
-                        _isPlaying.value = false
-                        _playbackProgress.value = 1f
-                        onPlaybackCompletedCallback?.invoke()
-                    }
-                }
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(utteranceId: String?) {
-                scope.launch {
-                    if (utteranceId == activeUtteranceId) {
-                        activeUtteranceId = null
-                        _isPlaying.value = false
-                    }
-                }
-            }
-        })
     }
 
     fun speak(
@@ -263,9 +274,9 @@ class PrayerAudioCoach(private val context: Context) {
 
     fun pause() {
         isPaused = true
-        exoPlayer?.pause()
+        runCatching { exoPlayer?.pause() }
         activeUtteranceId = null
-        localTts?.stop()
+        runCatching { localTts?.stop() }
         progressJob?.cancel()
         _isPlaying.value = false
     }
@@ -274,8 +285,9 @@ class PrayerAudioCoach(private val context: Context) {
         if (!isPaused) return
         isPaused = false
         val player = exoPlayer
-        if (player != null && player.playbackState == Player.STATE_READY) {
-            player.play()
+        val isReady = runCatching { player?.playbackState == Player.STATE_READY }.getOrDefault(false)
+        if (isReady && player != null) {
+            runCatching { player.play() }
         } else if (activeText.isNotEmpty() && _playbackProgress.value < 1f) {
             speakWithLocalTts(activeText, Gender.MALE, activeSpeed)
         }
@@ -291,16 +303,19 @@ class PrayerAudioCoach(private val context: Context) {
 
     private fun stopInternal() {
         activeUtteranceId = null
-        exoPlayer?.stop()
-        localTts?.stop()
+        runCatching { exoPlayer?.stop() }
+        runCatching { localTts?.stop() }
         _isPlaying.value = false
     }
 
     fun release() {
         stop()
-        exoPlayer?.release()
+        currentSpeechJob?.cancel()
+        progressJob?.cancel()
+        scope.coroutineContext.cancelChildren()
+        runCatching { exoPlayer?.release() }
         exoPlayer = null
-        localTts?.shutdown()
+        runCatching { localTts?.shutdown() }
         localTts = null
     }
 

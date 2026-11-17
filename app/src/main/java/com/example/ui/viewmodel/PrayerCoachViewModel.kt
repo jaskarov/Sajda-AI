@@ -79,21 +79,27 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun prepareTrack(track: PrayerTrack, initialMode: CoachMode = CoachMode.CAMERA_AI) {
+        val currentGender = _uiState.value.settings.gender
+        val initialSteps = sequenceEngine.buildSteps(track, currentGender)
+        _uiState.update {
+            it.copy(
+                track = track,
+                steps = initialSteps,
+                currentStepIndex = 0,
+                mode = initialMode,
+                isCompleted = false,
+                isPaused = false,
+                stepAudioDone = false,
+                calibrationConfirmedOnce = false
+            )
+        }
         viewModelScope.launch {
             val settings = prefsRepo.settingsFlow.first()
-            val steps = sequenceEngine.buildSteps(track, settings.gender)
-            _uiState.update {
-                it.copy(
-                    track = track,
-                    settings = settings,
-                    steps = steps,
-                    currentStepIndex = 0,
-                    mode = initialMode,
-                    isCompleted = false,
-                    isPaused = false,
-                    stepAudioDone = false,
-                    calibrationConfirmedOnce = false
-                )
+            if (settings.gender != currentGender) {
+                val updatedSteps = sequenceEngine.buildSteps(track, settings.gender)
+                _uiState.update { it.copy(settings = settings, steps = updatedSteps) }
+            } else {
+                _uiState.update { it.copy(settings = settings) }
             }
         }
     }
@@ -113,26 +119,33 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         mode: CoachMode,
         fallbackReason: FallbackReason = FallbackReason.NONE
     ) {
+        val currentGender = _uiState.value.settings.gender
+        val steps = sequenceEngine.buildSteps(track, currentGender)
+        activeSessionStarted = true
+        sessionStartMillis = SystemClock.elapsedRealtime()
+        lastAutoAdvanceStepIndex = -1
+        _uiState.update {
+            it.copy(
+                track = track,
+                steps = steps,
+                mode = mode,
+                fallbackReason = fallbackReason,
+                currentStepIndex = 0,
+                isPaused = false,
+                isCompleted = false,
+                stepAudioDone = false
+            )
+        }
+        enterStep(0)
+
         viewModelScope.launch {
             val settings = prefsRepo.settingsFlow.first()
-            val steps = sequenceEngine.buildSteps(track, settings.gender)
-            activeSessionStarted = true
-            sessionStartMillis = SystemClock.elapsedRealtime()
-            lastAutoAdvanceStepIndex = -1
-            _uiState.update {
-                it.copy(
-                    track = track,
-                    settings = settings,
-                    steps = steps,
-                    mode = mode,
-                    fallbackReason = fallbackReason,
-                    currentStepIndex = 0,
-                    isPaused = false,
-                    isCompleted = false,
-                    stepAudioDone = false
-                )
+            if (settings.gender != currentGender) {
+                val updatedSteps = sequenceEngine.buildSteps(track, settings.gender)
+                _uiState.update { it.copy(settings = settings, steps = updatedSteps) }
+            } else {
+                _uiState.update { it.copy(settings = settings) }
             }
-            enterStep(0)
         }
     }
 
@@ -312,9 +325,13 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
+    fun cleanup() {
         timerJob?.cancel()
         audioCoach.release()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        cleanup()
     }
 }
