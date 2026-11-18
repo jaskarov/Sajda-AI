@@ -45,7 +45,8 @@ data class PrayerCoachUiState(
     val calibrationConfirmedOnce: Boolean = false,
     val totalSessionSeconds: Int = 0,
     val pendingNextTrack: PrayerTrack? = null,
-    val nextTrackCountdownSec: Int = 0
+    val nextTrackCountdownSec: Int = 0,
+    val hapticFeedbackPulse: Int = 0
 ) {
     val currentStep: PrayerStep? get() = steps.getOrNull(currentStepIndex)
 }
@@ -260,6 +261,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     fun advanceToNextStep() {
         val state = _uiState.value
         if (state.isCompleted) return
+        _uiState.update { it.copy(hapticFeedbackPulse = it.hapticFeedbackPulse + 1) }
         val nextIdx = state.currentStepIndex + 1
         if (nextIdx >= state.steps.size) {
             completePrayerSession()
@@ -337,12 +339,31 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             )
         }
         val updated = _uiState.value
-        if (updated.mode == CoachMode.AUDIO_ONLY &&
-            !updated.isPaused &&
-            updated.audioOnlyRemainingSec <= 0
-        ) {
-            advanceToNextStep()
+        if (updated.isPaused) return
+
+        when (updated.mode) {
+            CoachMode.AUDIO_ONLY -> {
+                if (updated.audioOnlyRemainingSec <= 0) {
+                    advanceToNextStep()
+                }
+            }
+            CoachMode.CAMERA_AI -> {
+                val step = updated.currentStep ?: return
+                val elapsedInStep = SystemClock.elapsedRealtime() - stepEnteredMillis
+                val poseMatches = isPoseCompatible(updated.poseSnapshot.confirmedPose, step.expectedPose)
+                if (poseMatches && elapsedInStep >= 1200L &&
+                    lastAutoAdvanceStepIndex != updated.currentStepIndex
+                ) {
+                    lastAutoAdvanceStepIndex = updated.currentStepIndex
+                    advanceToNextStep()
+                }
+            }
         }
+    }
+
+    @androidx.annotation.VisibleForTesting
+    internal fun completeStepAudioForTest() {
+        finalizeStepAudio(_uiState.value.currentStepIndex)
     }
 
     private fun startAudioOnlyStepTimer() {

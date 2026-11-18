@@ -1,6 +1,7 @@
 package com.example.audio
 
 import android.content.Context
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
@@ -47,6 +48,44 @@ class PrayerAudioCoach(private val context: Context) {
     companion object {
         private const val TAG = "PrayerAudioCoach"
         private val SUPPORTED_EXTENSIONS = listOf("mp3", "m4a", "wav", "ogg")
+        const val PRAYER_VOLUME_TARGET_FRACTION = 0.85f
+
+        /**
+         * Saves current STREAM_MUSIC volume and raises it to [targetFraction] (85% by default)
+         * if currently lower so recitations remain clearly audible from ~2 meters away.
+         * Returns the original volume level to restore on exit, or null if already >= target.
+         */
+        fun boostPrayerStreamVolume(
+            audioManager: AudioManager,
+            targetFraction: Float = PRAYER_VOLUME_TARGET_FRACTION
+        ): Int? {
+            return runCatching {
+                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                if (maxVol <= 0) return null
+                val currentVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                val targetVol = kotlin.math.ceil(maxVol * targetFraction)
+                    .toInt()
+                    .coerceIn(0, maxVol)
+                if (currentVol < targetVol) {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+                    currentVol
+                } else {
+                    null
+                }
+            }.getOrNull()
+        }
+
+        fun restorePrayerStreamVolume(
+            audioManager: AudioManager,
+            originalVolume: Int?
+        ) {
+            if (originalVolume == null) return
+            runCatching {
+                val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val safeVol = originalVolume.coerceIn(0, maxVol.coerceAtLeast(0))
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, safeVol, 0)
+            }
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -134,6 +173,14 @@ class PrayerAudioCoach(private val context: Context) {
                                 engine.language = locale
                                 break
                             }
+                        }
+                        runCatching {
+                            engine.setAudioAttributes(
+                                android.media.AudioAttributes.Builder()
+                                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                    .build()
+                            )
                         }
                         isLocalTtsReady = true
                     }
@@ -258,7 +305,10 @@ class PrayerAudioCoach(private val context: Context) {
             activeUtteranceId = utteranceId
             localTts?.setPitch(if (gender == Gender.FEMALE) 1.06f else 0.96f)
             localTts?.setSpeechRate(speed)
-            val result = localTts?.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), utteranceId)
+            val ttsParams = Bundle().apply {
+                putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+            }
+            val result = localTts?.speak(text, TextToSpeech.QUEUE_FLUSH, ttsParams, utteranceId)
             ttsStarted = result == TextToSpeech.SUCCESS
             if (!ttsStarted) {
                 activeUtteranceId = null

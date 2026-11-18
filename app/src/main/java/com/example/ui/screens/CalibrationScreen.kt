@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -259,46 +261,122 @@ fun CalibrationScreen(
             )
         }
 
-        // Top Bar
-        Row(
+        // Top Bar + Compact Phone Placement Visual Guide
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .widthIn(max = 560.dp)
                 .align(Alignment.TopCenter)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.55f)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                IconButton(
-                    onClick = onExit,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("calibration_exit_button")
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = lText("Chiqish", "Чиқиш").get(script),
-                        tint = Color.White
+                    IconButton(
+                        onClick = onExit,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("calibration_exit_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = lText("Chiqish", "Чиқиш").get(script),
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f)
+                ) {
+                    Text(
+                        text = uiState.track.title.get(script),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
                     )
                 }
+
+                Spacer(Modifier.size(48.dp))
             }
 
             Surface(
-                shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.55f)
+                shape = RoundedCornerShape(16.dp),
+                color = Color.Black.copy(alpha = 0.72f),
+                border = BorderStroke(1.dp, SaffronGold.copy(alpha = 0.45f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("calibration_placement_guide_card")
             ) {
-                Text(
-                    text = uiState.track.title.get(script),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
-                )
-            }
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SaffronGold.copy(alpha = 0.18f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Straighten,
+                                contentDescription = null,
+                                tint = SaffronGold,
+                                modifier = Modifier
+                                    .padding(4.dp)
+                                    .size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = lText(
+                                "Joynamozdan 2 qadam (1.8 – 2.2 metr) masofaga qo‘ying",
+                                "Жойнамоздан 2 қадам (1.8 – 2.2 метр) масофага қўйинг"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
 
-            Spacer(Modifier.size(48.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = PoseMatchedGreen.copy(alpha = 0.18f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ScreenRotation,
+                                contentDescription = null,
+                                tint = PoseMatchedGreen,
+                                modifier = Modifier
+                                    .padding(4.dp)
+                                    .size(16.dp)
+                            )
+                        }
+                        Text(
+                            text = lText(
+                                "Telefonni kitob yoki devorga biroz qiya (70°–80°) suyab qo‘ying",
+                                "Телефонни китоб ёки деворга бироз қия (70°–80°) суяб қўйинг"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.92f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
 
         // Bottom Guidance & Controls
@@ -403,6 +481,11 @@ fun CalibrationScreen(
                     )
                 }
 
+                val startBtnContainer by animateColorAsState(
+                    targetValue = if (isReady || !hasCameraPermission) PoseMatchedGreen
+                    else Color.White.copy(alpha = 0.2f),
+                    label = "calibration_start_btn_color"
+                )
                 Button(
                     onClick = {
                         val mode = if (hasCameraPermission) CoachMode.CAMERA_AI else CoachMode.AUDIO_ONLY
@@ -410,14 +493,17 @@ fun CalibrationScreen(
                         else FallbackReason.CAMERA_PERMISSION_DENIED
                         navigateToSession(mode, reason)
                     },
+                    enabled = isReady || !hasCameraPermission,
                     modifier = Modifier
                         .weight(1f)
                         .height(54.dp)
                         .testTag("calibration_start_now_button"),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = SaffronGold,
-                        contentColor = Color(0xFF1D1500)
+                        containerColor = startBtnContainer,
+                        contentColor = Color(0xFF00291D),
+                        disabledContainerColor = Color.White.copy(alpha = 0.16f),
+                        disabledContentColor = Color.White.copy(alpha = 0.5f)
                     )
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)

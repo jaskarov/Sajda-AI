@@ -1,10 +1,15 @@
 package com.example
 
 import androidx.test.core.app.ApplicationProvider
+import com.example.domain.engine.PrayerSequenceEngine
 import com.example.domain.model.CoachMode
 import com.example.domain.model.FallbackReason
+import com.example.domain.model.Gender
+import com.example.domain.model.PoseAnalysisSnapshot
+import com.example.domain.model.PrayerPose
 import com.example.domain.model.PrayerTrack
 import com.example.ui.viewmodel.PrayerCoachViewModel
+import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -23,6 +28,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -123,5 +129,63 @@ class PrayerCoachViewModelRobolectricTest {
         assertEquals(PrayerTrack.BOMDOD_FARZ, farzState.track)
         assertEquals(0, farzState.currentStepIndex)
         assertEquals(null, farzState.pendingNextTrack)
+    }
+
+    @Test
+    fun cameraAi_requiresBothAudioDoneAndPoseMatched_andTriggersHapticPulse() {
+        viewModel.startActivePrayerSession(
+            track = PrayerTrack.BOMDOD_SUNNAT,
+            mode = CoachMode.CAMERA_AI,
+            fallbackReason = FallbackReason.NONE
+        )
+        assertEquals(0, viewModel.uiState.value.currentStepIndex)
+        assertEquals(0, viewModel.uiState.value.hapticFeedbackPulse)
+
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(2))
+
+        // 1. Pose matches TAKBIR, but audio is NOT finished yet -> must NOT advance
+        viewModel.onPoseSnapshot(
+            PoseAnalysisSnapshot(
+                confirmedPose = PrayerPose.TAKBIR,
+                rawPose = PrayerPose.TAKBIR,
+                isFullBodyVisible = true
+            )
+        )
+        assertEquals(0, viewModel.uiState.value.currentStepIndex)
+        assertEquals(0, viewModel.uiState.value.hapticFeedbackPulse)
+
+        // 2. Step completes audio while mismatched pose (QIYOM instead of TAKBIR) -> must NOT advance
+        viewModel.onPoseSnapshot(
+            PoseAnalysisSnapshot(
+                confirmedPose = PrayerPose.QIYOM,
+                rawPose = PrayerPose.QIYOM,
+                isFullBodyVisible = true
+            )
+        )
+        viewModel.completeStepAudioForTest()
+        assertEquals(0, viewModel.uiState.value.currentStepIndex)
+        assertTrue(viewModel.uiState.value.stepAudioDone)
+
+        // 3. Now skeleton confirms TAKBIR while audio is done -> advances & increments haptic pulse
+        viewModel.onPoseSnapshot(
+            PoseAnalysisSnapshot(
+                confirmedPose = PrayerPose.TAKBIR,
+                rawPose = PrayerPose.TAKBIR,
+                isFullBodyVisible = true
+            )
+        )
+        assertEquals(1, viewModel.uiState.value.currentStepIndex)
+        assertEquals(1, viewModel.uiState.value.hapticFeedbackPulse)
+    }
+
+    @Test
+    fun sequenceEngine_prependsTakbirAudioOnRakat2AndQada() {
+        val steps = PrayerSequenceEngine().buildSteps(PrayerTrack.BOMDOD_FARZ, Gender.MALE)
+        val rakat2Fotiha = steps.first { it.rakatNumber == 2 && it.recitationTitle.latin.contains("FOTIHA") }
+        assertTrue(rakat2Fotiha.audioAssetId.startsWith("takbir,"))
+        assertTrue(rakat2Fotiha.ttsPrompt.contains("Allohu akbar"))
+
+        val qadaAttahiyat = steps.first { it.expectedPose == PrayerPose.QADA && it.recitationTitle.latin.contains("ATTAHIYAT") }
+        assertTrue(qadaAttahiyat.audioAssetId.startsWith("takbir,"))
     }
 }

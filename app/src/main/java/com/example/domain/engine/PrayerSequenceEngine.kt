@@ -106,10 +106,18 @@ class PrayerSequenceEngine {
                     if (hasZamSura) "Фотиҳа сурасидан сўнг зам сура ўқилади"
                     else "Сура тугагач, рукуга эгилинг"
                 ),
-                ttsPrompt = PrayerContentCatalog.surahs[1].ttsPrompt,
+                ttsPrompt = if (rakat > 1) {
+                    "Allohu akbar. ${PrayerContentCatalog.surahs[1].ttsPrompt}"
+                } else {
+                    PrayerContentCatalog.surahs[1].ttsPrompt
+                },
                 minHoldDurationMs = 15000L,
                 requiresPoseTransition = rakat > 1,
-                audioAssetId = PrayerContentCatalog.surahs[1].audioAssetId,
+                audioAssetId = if (rakat > 1) {
+                    "takbir,${PrayerContentCatalog.surahs[1].audioAssetId}"
+                } else {
+                    PrayerContentCatalog.surahs[1].audioAssetId
+                },
                 postRecitationCue = if (hasZamSura) {
                     lText("Endi zam surani o‘qing", "Энди зам сурани ўқинг")
                 } else {
@@ -324,7 +332,7 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
                     minHoldDurationMs = 12000L,
-                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId,
+                    audioAssetId = "takbir,${PrayerContentCatalog.surahs[5].audioAssetId}",
                     postRecitationCue = lText(
                         "Allohu akbar, navbatdagi rakatga turing",
                         "Аллоҳу акбар, навбатдаги ракатга туринг"
@@ -351,7 +359,7 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
                     minHoldDurationMs = 12000L,
-                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId,
+                    audioAssetId = "takbir,${PrayerContentCatalog.surahs[5].audioAssetId}",
                     postRecitationCue = lText(
                         "Endi Salovat va Robbana duosini o‘qing",
                         "Энди Саловат ва Роббана дуосини ўқинг"

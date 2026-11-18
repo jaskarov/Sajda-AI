@@ -2,7 +2,9 @@ package com.example.ui.screens
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.RepeatMode
@@ -54,13 +56,19 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -73,12 +81,14 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.LocalRuntimePermissions
 import com.example.audio.AudioCoachStatus
+import com.example.audio.PrayerAudioCoach
 import com.example.domain.model.CoachMode
 import com.example.domain.model.FallbackReason
 import com.example.domain.model.PoseAnalysisSnapshot
 import com.example.domain.model.PrayerTrack
 import com.example.domain.model.lText
 import com.example.ui.components.CameraPosePreview
+import com.example.ui.components.RakatProgressIndicator
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.NightEmeraldPrimary
 import com.example.ui.theme.NightGold
@@ -105,13 +115,44 @@ fun ActivePrayerScreen(
     BackHandler(onBack = onExit)
 
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val script = uiState.settings.script
+    var savedOriginalVolume by remember { mutableStateOf<Int?>(null) }
 
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+        savedOriginalVolume = audioManager?.let {
+            PrayerAudioCoach.boostPrayerStreamVolume(
+                audioManager = it,
+                targetFraction = PrayerAudioCoach.PRAYER_VOLUME_TARGET_FRACTION
+            )
+        }
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (audioManager != null && savedOriginalVolume != null) {
+                PrayerAudioCoach.restorePrayerStreamVolume(audioManager, savedOriginalVolume)
+                savedOriginalVolume = null
+            }
+        }
+    }
+
+    // Restore original media volume once final prayer track completes (when no Sunnat->Farz continuation pending)
+    LaunchedEffect(uiState.isCompleted, uiState.pendingNextTrack) {
+        if (uiState.isCompleted && uiState.pendingNextTrack == null && savedOriginalVolume != null) {
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (audioManager != null) {
+                PrayerAudioCoach.restorePrayerStreamVolume(audioManager, savedOriginalVolume)
+                savedOriginalVolume = null
+            }
+        }
+    }
+
+    // Tactile vibration when a prayer rukn is confirmed and advances to the next movement
+    LaunchedEffect(uiState.hapticFeedbackPulse) {
+        if (uiState.hapticFeedbackPulse > 0) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
     }
 
@@ -205,16 +246,15 @@ fun ActivePrayerScreen(
                 }
             }
 
-            // Progress bar across steps
-            val totalSteps = uiState.steps.size.coerceAtLeast(1)
-            LinearProgressIndicator(
-                progress = { (uiState.currentStepIndex + 1) / totalSteps.toFloat() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(CircleShape),
-                color = NightEmeraldPrimary,
-                trackColor = ObsidianSurfaceVariant
+            // Visual Rakat-by-Rakat Progress Indicator (Current vs Next Rakat)
+            RakatProgressIndicator(
+                currentRakat = step.rakatNumber,
+                totalRakats = step.totalRakats,
+                currentStepIndex = uiState.currentStepIndex,
+                steps = uiState.steps,
+                nextContinuationTrack = uiState.track.nextContinuationTrack(),
+                isPaused = uiState.isPaused,
+                script = script
             )
 
             // Fallback Banner if in Audio-Only mode
