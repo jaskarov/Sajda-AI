@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Sajda AI"
+rootProject.name = "Namoz Ustoz AI"
 
 include(":app")

@@ -27,6 +27,8 @@ data class UserSettings(
     val seatedPrayerMode: Boolean = false,
     val largeTextMode: Boolean = false,
     val lowPowerCameraMode: Boolean = false,
+    val autoBoostPrayerVolume: Boolean = true,
+    val acousticChimeEnabled: Boolean = true,
     val alarmMap: Map<PrayerType, Boolean> = PrayerType.entries.associateWith { it.isPrayable }
 )
 
@@ -43,6 +45,8 @@ class UserPreferencesRepository(private val context: Context) {
         val SEATED_PRAYER_MODE = booleanPreferencesKey("seated_prayer_mode")
         val LARGE_TEXT_MODE = booleanPreferencesKey("large_text_mode")
         val LOW_POWER_CAMERA_MODE = booleanPreferencesKey("low_power_camera_mode")
+        val AUTO_BOOST_PRAYER_VOLUME = booleanPreferencesKey("auto_boost_prayer_volume")
+        val ACOUSTIC_CHIME_ENABLED = booleanPreferencesKey("acoustic_chime_enabled")
         fun alarmKey(type: PrayerType) = booleanPreferencesKey("alarm_${type.id}")
     }
 
@@ -61,6 +65,8 @@ class UserPreferencesRepository(private val context: Context) {
             seatedPrayerMode = prefs[Keys.SEATED_PRAYER_MODE] ?: false,
             largeTextMode = prefs[Keys.LARGE_TEXT_MODE] ?: false,
             lowPowerCameraMode = prefs[Keys.LOW_POWER_CAMERA_MODE] ?: false,
+            autoBoostPrayerVolume = prefs[Keys.AUTO_BOOST_PRAYER_VOLUME] ?: true,
+            acousticChimeEnabled = prefs[Keys.ACOUSTIC_CHIME_ENABLED] ?: true,
             alarmMap = alarms
         )
     }
@@ -122,6 +128,14 @@ class UserPreferencesRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.LOW_POWER_CAMERA_MODE] = enabled }
     }
 
+    suspend fun setAutoBoostPrayerVolume(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUTO_BOOST_PRAYER_VOLUME] = enabled }
+    }
+
+    suspend fun setAcousticChimeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.ACOUSTIC_CHIME_ENABLED] = enabled }
+    }
+
     suspend fun restoreSettings(settings: UserSettings) {
         context.dataStore.edit { prefs ->
             prefs[Keys.ONBOARDING_COMPLETED] = true
@@ -134,6 +148,8 @@ class UserPreferencesRepository(private val context: Context) {
             prefs[Keys.SEATED_PRAYER_MODE] = settings.seatedPrayerMode
             prefs[Keys.LARGE_TEXT_MODE] = settings.largeTextMode
             prefs[Keys.LOW_POWER_CAMERA_MODE] = settings.lowPowerCameraMode
+            prefs[Keys.AUTO_BOOST_PRAYER_VOLUME] = settings.autoBoostPrayerVolume
+            prefs[Keys.ACOUSTIC_CHIME_ENABLED] = settings.acousticChimeEnabled
             PrayerType.entries.forEach { type ->
                 prefs[Keys.alarmKey(type)] = settings.alarmMap[type] ?: type.isPrayable
             }

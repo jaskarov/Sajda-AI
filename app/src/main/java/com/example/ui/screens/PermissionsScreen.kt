@@ -357,8 +357,8 @@ fun PermissionsScreen(
                     "Батарея чекловисиз азон (Xiaomi / Samsung)"
                 ).get(script),
                 description = lText(
-                    "Telefon uxlaganda azon signali to‘xtab qolmasligi uchun tizim sozlamalarida Sajda AI uchun \"Cheklanmagan\" (Unrestricted) rejimini tanlang.",
-                    "Телефон ухлаганда азон сигнали тўхтаб қолмаслиги учун тизим созламаларида Sajda AI учун «Чекланмаган» (Unrestricted) режимини танланг."
+                    "Telefon uxlaganda azon signali to‘xtab qolmasligi uchun tizim sozlamalarida Namoz Ustoz AI uchun \"Cheklanmagan\" (Unrestricted) rejimini tanlang.",
+                    "Телефон ухлаганда азон сигнали тўхтаб қолмаслиги учун тизим созламаларида Namoz Ustoz AI учун «Чекланмаган» (Unrestricted) режимини танланг."
                 ).get(script),
                 granted = batteryOptimizationIgnored,
                 actionLabel = lText("Batareya sozlamalarini ochish", "Батарея созламаларини очиш").get(script),

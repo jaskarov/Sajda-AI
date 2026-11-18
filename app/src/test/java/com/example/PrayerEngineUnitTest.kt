@@ -84,7 +84,10 @@ class PrayerEngineUnitTest {
     fun trackContinuationAndPostRecitationCues_areConfigured() {
         assertEquals(PrayerTrack.BOMDOD_FARZ, PrayerTrack.BOMDOD_SUNNAT.nextContinuationTrack())
         assertEquals(PrayerTrack.PESHIN_FARZ, PrayerTrack.PESHIN_SUNNAT_1.nextContinuationTrack())
-        assertEquals(PrayerTrack.VITR_VOJIB, PrayerTrack.XUFTON_FARZ.nextContinuationTrack())
+        assertEquals(PrayerTrack.PESHIN_SUNNAT_2, PrayerTrack.PESHIN_FARZ.nextContinuationTrack())
+        assertEquals(PrayerTrack.SHOM_SUNNAT, PrayerTrack.SHOM_FARZ.nextContinuationTrack())
+        assertEquals(PrayerTrack.XUFTON_SUNNAT, PrayerTrack.XUFTON_FARZ.nextContinuationTrack())
+        assertEquals(PrayerTrack.VITR_VOJIB, PrayerTrack.XUFTON_SUNNAT.nextContinuationTrack())
 
         val steps = PrayerSequenceEngine().buildSteps(PrayerTrack.BOMDOD_SUNNAT, Gender.MALE)
         val zamSura = steps.first { it.stepTitle.latin.contains("Zam sura") }

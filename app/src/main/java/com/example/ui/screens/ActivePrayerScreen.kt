@@ -108,6 +108,7 @@ fun ActivePrayerScreen(
     onTogglePause: () -> Unit,
     onNextStep: () -> Unit,
     onStartNextTrack: () -> Unit = {},
+    onExtendContinuation: () -> Unit = {},
     onSwitchToAudioOnly: () -> Unit,
     onSwitchToCamera: () -> Unit,
     onExit: () -> Unit
@@ -119,15 +120,22 @@ fun ActivePrayerScreen(
     val script = uiState.settings.script
     var savedOriginalVolume by remember { mutableStateOf<Int?>(null) }
 
+    val shouldBoostVolume = uiState.settings.autoBoostPrayerVolume &&
+        uiState.fallbackReason != FallbackReason.LOW_LIGHT_DARK_ROOM
+
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        savedOriginalVolume = audioManager?.let {
-            PrayerAudioCoach.boostPrayerStreamVolume(
-                audioManager = it,
-                targetFraction = PrayerAudioCoach.PRAYER_VOLUME_TARGET_FRACTION
-            )
+        savedOriginalVolume = if (shouldBoostVolume) {
+            audioManager?.let {
+                PrayerAudioCoach.boostPrayerStreamVolume(
+                    audioManager = it,
+                    targetFraction = PrayerAudioCoach.PRAYER_VOLUME_TARGET_FRACTION
+                )
+            }
+        } else {
+            null
         }
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -160,6 +168,7 @@ fun ActivePrayerScreen(
         PrayerCompletedView(
             uiState = uiState,
             onStartNextTrack = onStartNextTrack,
+            onExtendContinuation = onExtendContinuation,
             onFinish = onExit
         )
         return
@@ -276,6 +285,29 @@ fun ActivePrayerScreen(
                 isPaused = uiState.isPaused,
                 script = script
             )
+
+            val activeQazoType = com.example.domain.model.QazoPrayerType.fromId(uiState.qazoTypeId)
+            if (activeQazoType != null) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = NightGold.copy(alpha = 0.16f),
+                    border = BorderStroke(1.dp, NightGold.copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("active_qazo_badge")
+                ) {
+                    Text(
+                        text = lText(
+                            "Qazo namozi: ${activeQazoType.title.latin} • Yakunlangach qazo daftaridan ayiriladi",
+                            "Қазо намози: ${activeQazoType.title.cyrillic} • Якунлангач қазо дафтаридан айирилади"
+                        ).get(script),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = NightGold,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
 
             // Fallback Banner if in Audio-Only mode
             if (uiState.mode == CoachMode.AUDIO_ONLY) {
@@ -446,12 +478,15 @@ fun ActivePrayerScreen(
                                         maxLines = 1
                                     )
                                     Text(
-                                        text = if (isPoseAligned) {
-                                            lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
-                                        } else if (isSeatedMode) {
-                                            lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
-                                        } else {
-                                            lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
+                                        text = when {
+                                            step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
+                                                uiState.salamProgressStage == 1 -> lText(
+                                                "1-yelka ✓ • Narigi buring",
+                                                "1-елка ✓ • Нариги буринг"
+                                            ).get(script)
+                                            isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
+                                            isSeatedMode -> lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
+                                            else -> lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
                                         },
                                         fontSize = 10.sp,
                                         color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
@@ -843,6 +878,7 @@ private fun SurahRecitationVisualizer(
 private fun PrayerCompletedView(
     uiState: PrayerCoachUiState,
     onStartNextTrack: () -> Unit,
+    onExtendContinuation: () -> Unit,
     onFinish: () -> Unit
 ) {
     val script = uiState.settings.script
@@ -911,22 +947,26 @@ private fun PrayerCompletedView(
 
                 if (nextTrack != null) {
                     val isVitrNext = nextTrack == PrayerTrack.VITR_VOJIB
-                    val bannerTitleLat = if (isVitrNext) {
-                        "Xufton farz tugadi. ${uiState.nextTrackCountdownSec} soniyada Vitr namozi (${nextTrack.rakatCount} rakat) boshlanadi"
-                    } else {
-                        "Sunnat namozi tugadi. ${uiState.nextTrackCountdownSec} soniyada Farz namozi (${nextTrack.rakatCount} rakat) boshlanadi"
+                    val isPostFarzSunnat = nextTrack == PrayerTrack.PESHIN_SUNNAT_2 ||
+                        nextTrack == PrayerTrack.SHOM_SUNNAT ||
+                        nextTrack == PrayerTrack.XUFTON_SUNNAT
+                    val bannerTitleLat = when {
+                        isVitrNext -> "Navbatda Vitr namozi. ${uiState.nextTrackCountdownSec} soniyada (${nextTrack.rakatCount} rakat) boshlanadi"
+                        isPostFarzSunnat -> "Farz namozi tugadi. ${uiState.nextTrackCountdownSec} soniyada 2 rakat sunnat boshlanadi"
+                        else -> "Sunnat namozi tugadi. ${uiState.nextTrackCountdownSec} soniyada Farz namozi (${nextTrack.rakatCount} rakat) boshlanadi"
                     }
-                    val bannerTitleCyr = if (isVitrNext) {
-                        "Хуфтон фарз тугади. ${uiState.nextTrackCountdownSec} сонияда Витр намози (${nextTrack.rakatCount} ракат) бошланади"
-                    } else {
-                        "Суннат намози тугади. ${uiState.nextTrackCountdownSec} сонияда Фарз намози (${nextTrack.rakatCount} ракат) бошланади"
+                    val bannerTitleCyr = when {
+                        isVitrNext -> "Навбатда Витр намози. ${uiState.nextTrackCountdownSec} сонияда (${nextTrack.rakatCount} ракат) бошланади"
+                        isPostFarzSunnat -> "Фарз намози тугади. ${uiState.nextTrackCountdownSec} сонияда 2 ракат суннат бошланади"
+                        else -> "Суннат намози тугади. ${uiState.nextTrackCountdownSec} сонияда Фарз намози (${nextTrack.rakatCount} ракат) бошланади"
                     }
-                    val nextBtnLabel = if (isVitrNext) {
-                        lText("Vitrni boshlash", "Витрни бошлаш").get(script)
-                    } else {
-                        lText("Farzni boshlash", "Фарзни бошлаш").get(script)
+                    val nextBtnLabel = when {
+                        isVitrNext -> lText("Vitrni boshlash", "Витрни бошлаш").get(script)
+                        isPostFarzSunnat -> lText("Sunnatni boshlash", "Суннатни бошлаш").get(script)
+                        else -> lText("Farzni boshlash", "Фарзни бошлаш").get(script)
                     }
 
+                    val totalSec = uiState.nextTrackCountdownTotalSec.coerceAtLeast(1)
                     Surface(
                         shape = RoundedCornerShape(18.dp),
                         color = NightEmeraldPrimary.copy(alpha = 0.14f),
@@ -949,7 +989,7 @@ private fun PrayerCompletedView(
                             )
                             LinearProgressIndicator(
                                 progress = {
-                                    ((5 - uiState.nextTrackCountdownSec).coerceIn(0, 5)) / 5f
+                                    ((totalSec - uiState.nextTrackCountdownSec).coerceIn(0, totalSec)) / totalSec.toFloat()
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -958,6 +998,17 @@ private fun PrayerCompletedView(
                                 color = NightGold,
                                 trackColor = Color.White.copy(alpha = 0.16f)
                             )
+                            OutlinedButton(
+                                onClick = onExtendContinuation,
+                                modifier = Modifier.testTag("extend_continuation_button"),
+                                border = BorderStroke(1.dp, NightGold.copy(alpha = 0.55f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = NightGold)
+                            ) {
+                                Text(
+                                    text = lText("+10 soniya kutish", "+10 сония кутиш").get(script),
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
 

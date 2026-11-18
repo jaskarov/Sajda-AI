@@ -1,7 +1,9 @@
 package com.example.audio
 
 import android.content.Context
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.net.Uri
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
@@ -118,6 +120,14 @@ class PrayerAudioCoach(private val context: Context) {
     private var activeText: String = ""
     private var activeSpeed: Float = 1.0f
     private var isPaused: Boolean = false
+    private val pendingQueuedUris = mutableListOf<Uri>()
+    private var pendingInterClipPauseMs: Long = 0L
+    private var totalClipSegments: Int = 1
+    private var completedClipSegments: Int = 0
+    private var interClipDelayJob: Job? = null
+
+    val hasUzbekTts: Boolean
+        get() = _ttsReadiness.value.hasUzbekLocale
 
     private val localRecitationsDir: File by lazy {
         File(context.filesDir, "recitations").apply { mkdirs() }
@@ -150,10 +160,27 @@ class PrayerAudioCoach(private val context: Context) {
 
                         override fun onPlaybackStateChanged(playbackState: Int) {
                             if (playbackState == Player.STATE_ENDED) {
-                                _isPlaying.value = false
-                                _playbackProgress.value = 1f
                                 progressJob?.cancel()
-                                onPlaybackCompletedCallback?.invoke()
+                                if (pendingQueuedUris.isNotEmpty() && !isPaused) {
+                                    completedClipSegments++
+                                    val nextUri = pendingQueuedUris.removeAt(0)
+                                    val pauseMs = pendingInterClipPauseMs
+                                    interClipDelayJob?.cancel()
+                                    interClipDelayJob = scope.launch {
+                                        if (pauseMs > 0L) delay(pauseMs)
+                                        if (isActive && !isPaused) {
+                                            runCatching {
+                                                exoPlayer?.setMediaItem(MediaItem.fromUri(nextUri))
+                                                exoPlayer?.prepare()
+                                                exoPlayer?.play()
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    _isPlaying.value = false
+                                    _playbackProgress.value = 1f
+                                    onPlaybackCompletedCallback?.invoke()
+                                }
                             }
                         }
                     })
@@ -310,13 +337,77 @@ class PrayerAudioCoach(private val context: Context) {
             val displayLabel = label.replace(",", " + ")
             _status.value = AudioCoachStatus.PlayingOfflineAudio(displayLabel)
             player.playbackParameters = PlaybackParameters(speed)
-            player.setMediaItems(uris.map { MediaItem.fromUri(it) })
+            pendingQueuedUris.clear()
+            completedClipSegments = 0
+
+            val needsBreathPause = uris.size > 1 && label.startsWith("takbir,")
+            if (needsBreathPause) {
+                pendingInterClipPauseMs = 1400L
+                totalClipSegments = uris.size
+                pendingQueuedUris.addAll(uris.drop(1))
+                player.setMediaItem(MediaItem.fromUri(uris.first()))
+            } else {
+                pendingInterClipPauseMs = 0L
+                totalClipSegments = uris.size.coerceAtLeast(1)
+                player.setMediaItems(uris.map { MediaItem.fromUri(it) })
+            }
             player.prepare()
             player.play()
             true
         }.onFailure { err ->
             Log.w(TAG, "ExoPlayer failed for offline asset $label, falling back to TTS", err)
         }.getOrDefault(false)
+    }
+
+    /**
+     * Plays a subtle, gentle acoustic chime (~528 Hz warm harmonic tone, ~110ms)
+     * so worshippers facing the prayer mat hear step confirmation without looking at the screen.
+     */
+    fun playStepConfirmedChime() {
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                val sampleRate = 22050
+                val durationMs = 110
+                val count = (sampleRate * durationMs) / 1000
+                val samples = ShortArray(count)
+                for (i in 0 until count) {
+                    val t = i.toDouble() / sampleRate
+                    val env = kotlin.math.sin(Math.PI * i / count.toDouble()) * kotlin.math.exp(-3.5 * t)
+                    val tone = kotlin.math.sin(2.0 * Math.PI * 528.0 * t) * 0.65 +
+                        kotlin.math.sin(2.0 * Math.PI * 792.0 * t) * 0.25
+                    samples[i] = (tone * env * Short.MAX_VALUE * 0.45).toInt()
+                        .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                        .toShort()
+                }
+                val minBuf = AudioTrack.getMinBufferSize(
+                    sampleRate,
+                    AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                ).coerceAtLeast(count * 2)
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(minBuf)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                track.write(samples, 0, samples.size)
+                track.play()
+                delay(160L)
+                track.stop()
+                track.release()
+            }
+        }
     }
 
     private fun speakWithLocalTts(text: String, gender: Gender, speed: Float) {
@@ -375,6 +466,9 @@ class PrayerAudioCoach(private val context: Context) {
     }
 
     private fun stopInternal() {
+        interClipDelayJob?.cancel()
+        pendingQueuedUris.clear()
+        pendingInterClipPauseMs = 0L
         activeUtteranceId = null
         runCatching { exoPlayer?.stop() }
         runCatching { localTts?.stop() }
@@ -384,6 +478,7 @@ class PrayerAudioCoach(private val context: Context) {
     fun release() {
         stop()
         currentSpeechJob?.cancel()
+        interClipDelayJob?.cancel()
         progressJob?.cancel()
         scope.coroutineContext.cancelChildren()
         runCatching { exoPlayer?.release() }
@@ -398,8 +493,16 @@ class PrayerAudioCoach(private val context: Context) {
             while (isActive) {
                 val player = exoPlayer ?: break
                 val duration = player.duration
-                val itemCount = player.mediaItemCount.coerceAtLeast(1)
-                val currentIdx = player.currentMediaItemIndex.coerceIn(0, itemCount - 1)
+                val itemCount = if (pendingInterClipPauseMs > 0L) {
+                    totalClipSegments.coerceAtLeast(1)
+                } else {
+                    player.mediaItemCount.coerceAtLeast(1)
+                }
+                val currentIdx = if (pendingInterClipPauseMs > 0L) {
+                    completedClipSegments.coerceIn(0, itemCount - 1)
+                } else {
+                    player.currentMediaItemIndex.coerceIn(0, itemCount - 1)
+                }
                 if (duration > 0L) {
                     val itemProgress = (player.currentPosition.toFloat() / duration.toFloat())
                         .coerceIn(0f, 1f)

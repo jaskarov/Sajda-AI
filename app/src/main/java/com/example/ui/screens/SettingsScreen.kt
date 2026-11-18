@@ -91,6 +91,8 @@ fun SettingsScreen(
     onSeatedModeToggle: (Boolean) -> Unit = {},
     onLargeTextModeToggle: (Boolean) -> Unit = {},
     onLowPowerCameraToggle: (Boolean) -> Unit = {},
+    onAutoBoostVolumeToggle: (Boolean) -> Unit = {},
+    onAcousticChimeToggle: (Boolean) -> Unit = {},
     onSyncCalendarNow: () -> Unit = {},
     onExportBackupUri: (Uri) -> Unit = {},
     onImportBackupUri: (Uri) -> Unit = {},
@@ -401,6 +403,64 @@ fun SettingsScreen(
                             )
                         }
 
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = lText(
+                                        "Namozda ovozni avtomatik ko‘tarish",
+                                        "Намозда овозни автоматик кўтариш"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = lText(
+                                        "2 metr masofadan eshitish uchun media ovozini 85% ga ko‘taradi (qorong‘ida o‘chiriladi).",
+                                        "2 метр масофадан эшитиш учун медиа овозини 85% га кўтаради (қоронғида ўчирилади)."
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = settings.autoBoostPrayerVolume,
+                                onCheckedChange = onAutoBoostVolumeToggle,
+                                modifier = Modifier.testTag("settings_auto_volume_switch")
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = lText(
+                                        "Rukn tasdig‘i tovushi (Chime)",
+                                        "Рукн тасдиғи товуши (Chime)"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    text = lText(
+                                        "Ekranga qaramasdan keyingi bosqichga o‘tganini bilish uchun yengil ovozli signal.",
+                                        "Экранга қарамасдан кейинги босқичга ўтганини билиш учун енгил овозли сигнал."
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = settings.acousticChimeEnabled,
+                                onCheckedChange = onAcousticChimeToggle,
+                                modifier = Modifier.testTag("settings_acoustic_chime_switch")
+                            )
+                        }
+
                         FilledTonalButton(
                             onClick = onTestAudio,
                             modifier = Modifier
@@ -614,7 +674,7 @@ fun SettingsScreen(
                                 onClick = {
                                     onClearBackupMessage()
                                     val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-                                    exportBackupLauncher.launch("sajda_ai_zaxira_$dateStr.json")
+                                    exportBackupLauncher.launch("namoz_ustoz_ai_zaxira_$dateStr.json")
                                 },
                                 modifier = Modifier
                                     .weight(1f)

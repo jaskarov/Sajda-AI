@@ -79,7 +79,8 @@ class PrayerHistoryRepository(
         rakatCount: Int,
         coachMode: String,
         cityId: String,
-        durationSeconds: Int
+        durationSeconds: Int,
+        markDailyCompleted: Boolean = true
     ) {
         val dayKey = todayKey()
         historyDao.insertHistory(
@@ -93,11 +94,13 @@ class PrayerHistoryRepository(
                 durationSeconds = durationSeconds
             )
         )
-        dailyProgressDao.setPrayerCompleted(
-            dayKey = dayKey,
-            prayerType = PrayerType.fromId(prayerTypeId),
-            completed = true
-        )
+        if (markDailyCompleted) {
+            dailyProgressDao.setPrayerCompleted(
+                dayKey = dayKey,
+                prayerType = PrayerType.fromId(prayerTypeId),
+                completed = true
+            )
+        }
     }
 
     suspend fun deleteEntry(id: Long) = historyDao.deleteById(id)

@@ -79,7 +79,89 @@ class PrayerPoseAnalyzer(
         }
 
         /**
-         * Detects left/right head turn (Salam) from horizontal asymmetry between NOSE and EARS.
+         * Detects signed left/right head turn direction for Salam:
+         *  -1 = turned to one side (left), +1 = turned to opposite side (right), 0 = centered.
+         * Supports ear-asymmetry, single-ear occlusion, AND hijab/scarf (ro'mol) fallback
+         * using eye-nose asymmetry and nose offset from shoulder midpoint.
+         */
+        fun detectHeadYawDirection(
+            nose: ExtractedPoseLandmark?,
+            leftEar: ExtractedPoseLandmark?,
+            rightEar: ExtractedPoseLandmark?,
+            leftShoulder: ExtractedPoseLandmark? = null,
+            rightShoulder: ExtractedPoseLandmark? = null,
+            frameWidth: Int = 480,
+            leftEye: ExtractedPoseLandmark? = null,
+            rightEye: ExtractedPoseLandmark? = null
+        ): Int {
+            if (!isReliableStatic(nose)) return 0
+            val n = nose!!
+            val hasLeftEar = isReliableStatic(leftEar)
+            val hasRightEar = isReliableStatic(rightEar)
+
+            if (hasLeftEar && hasRightEar) {
+                val dLeft = abs(n.x - leftEar!!.x)
+                val dRight = abs(n.x - rightEar!!.x)
+                val total = dLeft + dRight
+                if (total > 1e-3f) {
+                    val asymmetry = abs(dLeft - dRight) / total
+                    if (asymmetry >= SALAM_YAW_ASYMMETRY_THRESHOLD) {
+                        return if (dRight < dLeft) 1 else -1
+                    }
+                }
+            } else if (hasLeftEar xor hasRightEar) {
+                // One ear occluded by sharp turn or partial headscarf
+                val visibleEar = (if (hasLeftEar) leftEar else rightEar)!!
+                val shoulderSpan = if (isReliableStatic(leftShoulder) && isReliableStatic(rightShoulder)) {
+                    abs(leftShoulder!!.x - rightShoulder!!.x)
+                } else 0f
+                if (shoulderSpan >= frameWidth * 0.14f) {
+                    val noseEarDx = abs(n.x - visibleEar.x)
+                    if (noseEarDx >= shoulderSpan * 0.18f) {
+                        return if (n.x >= visibleEar.x) 1 else -1
+                    }
+                }
+            }
+
+            // Hijab / Scarf (ro'mol) fallback when ears are covered:
+            // 1) Eye-to-nose horizontal asymmetry or single-eye visibility
+            val hasLeftEye = isReliableStatic(leftEye)
+            val hasRightEye = isReliableStatic(rightEye)
+            val shoulderSpan = if (isReliableStatic(leftShoulder) && isReliableStatic(rightShoulder)) {
+                abs(leftShoulder!!.x - rightShoulder!!.x)
+            } else 0f
+
+            if (hasLeftEye && hasRightEye) {
+                val eLeft = abs(n.x - leftEye!!.x)
+                val eRight = abs(n.x - rightEye!!.x)
+                val totalEye = eLeft + eRight
+                if (totalEye > 1e-3f) {
+                    val eyeAsym = abs(eLeft - eRight) / totalEye
+                    if (eyeAsym >= 0.36f) {
+                        return if (eRight < eLeft) 1 else -1
+                    }
+                }
+            } else if ((hasLeftEye xor hasRightEye) && shoulderSpan >= frameWidth * 0.14f) {
+                val visibleEye = (if (hasLeftEye) leftEye else rightEye)!!
+                if (abs(n.x - visibleEye.x) >= shoulderSpan * 0.08f) {
+                    return if (n.x >= visibleEye.x) 1 else -1
+                }
+            }
+
+            // 2) Shoulder-midpoint nose displacement when both ears are fully veiled
+            if (shoulderSpan >= frameWidth * 0.14f) {
+                val shoulderMidX = (leftShoulder!!.x + rightShoulder!!.x) / 2f
+                val offset = n.x - shoulderMidX
+                if (abs(offset) >= shoulderSpan * 0.22f) {
+                    return if (offset >= 0f) 1 else -1
+                }
+            }
+            return 0
+        }
+
+        /**
+         * Detects left/right head turn (Salam) from horizontal asymmetry between NOSE and EARS,
+         * with hijab/scarf fallback when ears are occluded.
          */
         fun isHeadTurnedForSalam(
             nose: ExtractedPoseLandmark?,
@@ -87,34 +169,19 @@ class PrayerPoseAnalyzer(
             rightEar: ExtractedPoseLandmark?,
             leftShoulder: ExtractedPoseLandmark? = null,
             rightShoulder: ExtractedPoseLandmark? = null,
-            frameWidth: Int = 480
-        ): Boolean {
-            if (!isReliableStatic(nose)) return false
-            val n = nose!!
-            val hasLeft = isReliableStatic(leftEar)
-            val hasRight = isReliableStatic(rightEar)
-
-            if (hasLeft && hasRight) {
-                val dLeft = abs(n.x - leftEar!!.x)
-                val dRight = abs(n.x - rightEar!!.x)
-                val total = dLeft + dRight
-                if (total > 1e-3f) {
-                    val asymmetry = abs(dLeft - dRight) / total
-                    if (asymmetry >= SALAM_YAW_ASYMMETRY_THRESHOLD) return true
-                }
-            } else if (hasLeft xor hasRight) {
-                // When turned sharply sideways, one ear is occluded while shoulders face camera
-                val visibleEar = (if (hasLeft) leftEar else rightEar)!!
-                val shoulderSpan = if (isReliableStatic(leftShoulder) && isReliableStatic(rightShoulder)) {
-                    abs(leftShoulder!!.x - rightShoulder!!.x)
-                } else 0f
-                if (shoulderSpan >= frameWidth * 0.14f) {
-                    val noseEarDx = abs(n.x - visibleEar.x)
-                    if (noseEarDx >= shoulderSpan * 0.18f) return true
-                }
-            }
-            return false
-        }
+            frameWidth: Int = 480,
+            leftEye: ExtractedPoseLandmark? = null,
+            rightEye: ExtractedPoseLandmark? = null
+        ): Boolean = detectHeadYawDirection(
+            nose = nose,
+            leftEar = leftEar,
+            rightEar = rightEar,
+            leftShoulder = leftShoulder,
+            rightShoulder = rightShoulder,
+            frameWidth = frameWidth,
+            leftEye = leftEye,
+            rightEye = rightEye
+        ) != 0
 
         /**
          * Calculates forward lean angle (0..90+ degrees from upright vertical) for Seated/Chair mode
@@ -209,6 +276,8 @@ class PrayerPoseAnalyzer(
         isRoomTooDark: Boolean = false
     ): PoseAnalysisSnapshot {
         val nose = frameLandmarks.landmark(PoseLandmark.NOSE)
+        val lEye = frameLandmarks.landmark(PoseLandmark.LEFT_EYE)
+        val rEye = frameLandmarks.landmark(PoseLandmark.RIGHT_EYE)
         val lEar = frameLandmarks.landmark(PoseLandmark.LEFT_EAR)
         val rEar = frameLandmarks.landmark(PoseLandmark.RIGHT_EAR)
         val lShoulder = frameLandmarks.landmark(PoseLandmark.LEFT_SHOULDER)
@@ -310,6 +379,7 @@ class PrayerPoseAnalyzer(
 
         val isFrontalRuku = detectFrontalRuku(
             hasTorso = hasTorso,
+            hasLegs = hasLegs,
             kneeAngle = kneeAngle,
             currentTorsoSpanNorm = currentTorsoSpanNorm,
             currentNoseAboveAnkleNorm = currentNoseAboveAnkleNorm,
@@ -319,14 +389,17 @@ class PrayerPoseAnalyzer(
             avgAnkleNormY = avgAnkleNormY
         )
 
-        val isHeadTurned = isHeadTurnedForSalam(
+        val headYawDirection = detectHeadYawDirection(
             nose = nose,
             leftEar = lEar,
             rightEar = rEar,
             leftShoulder = lShoulder,
             rightShoulder = rShoulder,
-            frameWidth = frameLandmarks.frameWidth
+            frameWidth = frameLandmarks.frameWidth,
+            leftEye = lEye,
+            rightEye = rEye
         )
+        val isHeadTurned = headYawDirection != 0
 
         val rawPose = if (isSeated) {
             val currentUpperSpanNorm = if (hasHead && hasTorso) {
@@ -375,6 +448,7 @@ class PrayerPoseAnalyzer(
                 noseNormalizedY = noseNormalizedY,
                 shoulderNormalizedY = avgShoulderNormY,
                 hipNormalizedY = avgHipNormY,
+                currentTorsoSpanNorm = currentTorsoSpanNorm,
                 shoulderY = shoulder?.y,
                 hipY = hip?.y,
                 wristY = wrist?.y,
@@ -422,12 +496,14 @@ class PrayerPoseAnalyzer(
             landmarks = frameLandmarks.toNormalizedLandmarks(),
             imageWidth = frameLandmarks.frameWidth,
             imageHeight = frameLandmarks.frameHeight,
-            isFrontCamera = isFrontCamera
+            isFrontCamera = isFrontCamera,
+            headYawDirection = headYawDirection
         )
     }
 
     private fun detectFrontalRuku(
         hasTorso: Boolean,
+        hasLegs: Boolean,
         kneeAngle: Float,
         currentTorsoSpanNorm: Float?,
         currentNoseAboveAnkleNorm: Float?,
@@ -436,7 +512,8 @@ class PrayerPoseAnalyzer(
         avgHipNormY: Float,
         avgAnkleNormY: Float?
     ): Boolean {
-        if (!hasTorso || kneeAngle < 135f) return false
+        val kneesStraightOrCovered = if (hasLegs) kneeAngle >= 135f else true
+        if (!hasTorso || !kneesStraightOrCovered) return false
 
         // 1. Compare current torso span & height against calibrated Qiyom standing baseline (40-55%+ drop)
         val baseTorso = baselineTorsoSpanNorm
@@ -467,6 +544,8 @@ class PrayerPoseAnalyzer(
             if (legSpan >= 0.22f && currentTorsoSpanNorm <= legSpan * 0.42f && avgShoulderNormY <= avgHipNormY + 0.08f) {
                 return true
             }
+        } else if (!hasLegs && currentTorsoSpanNorm != null && avgHipNormY < 0.68f && currentTorsoSpanNorm <= 0.11f) {
+            return true
         }
         return false
     }
@@ -480,6 +559,7 @@ class PrayerPoseAnalyzer(
         noseNormalizedY: Float,
         shoulderNormalizedY: Float,
         hipNormalizedY: Float,
+        currentTorsoSpanNorm: Float?,
         shoulderY: Float?,
         hipY: Float?,
         wristY: Float?,
@@ -502,19 +582,23 @@ class PrayerPoseAnalyzer(
             return PrayerPose.SAJDA
         }
 
-        // 2. Salam check while seated (head turned right/left via nose-ear horizontal asymmetry)
+        // 2. Salam check while seated (head turned right/left via nose-ear or headscarf fallback)
         val isSeatedPosture = (kneeAngle in 1f..115f && noseNormalizedY < 0.74f) ||
             (!hasLegs && hipNormalizedY >= 0.58f && noseNormalizedY < 0.74f)
         if (isSeatedPosture && isHeadTurnedForSalam) {
             return PrayerPose.SALAM
         }
 
-        // 3. Qada / Sitting check: side-view (torso 65..120, knee < 62) OR frontal foreshortened Qa'da
+        // 3. Qada / Sitting check: side-view (torso 65..120, knee < 62), frontal foreshortened Qa'da, or loose dress sitting
         val isFrontalQada = hipNormalizedY >= 0.60f &&
             noseNormalizedY < 0.68f &&
             torsoAngle in 65f..148f &&
             kneeAngle in 1f..115f
-        if ((torsoAngle in 65f..120f && kneeAngle in 1f..62f && noseNormalizedY < 0.72f) || isFrontalQada) {
+        val isLooseDressQada = !hasLegs &&
+            hipNormalizedY >= 0.58f &&
+            noseNormalizedY in 0.25f..0.72f &&
+            shoulderNormalizedY >= 0.40f
+        if ((torsoAngle in 65f..120f && kneeAngle in 1f..62f && noseNormalizedY < 0.72f) || isFrontalQada || isLooseDressQada) {
             return PrayerPose.QADA
         }
 
@@ -523,8 +607,12 @@ class PrayerPoseAnalyzer(
             return PrayerPose.RUKU
         }
 
-        // 5. Upright standing: Takbir vs Qiyom
-        if (torsoAngle >= 150f && kneeAngle >= 150f) {
+        // 5. Upright standing: Takbir vs Qiyom (including loose long dress when knees are veiled)
+        val isStandingLooseDress = !hasLegs &&
+            hipNormalizedY < 0.65f &&
+            (currentTorsoSpanNorm ?: 0f) >= 0.16f &&
+            noseNormalizedY < 0.45f
+        if ((torsoAngle >= 150f && kneeAngle >= 150f) || isStandingLooseDress) {
             if (wristY != null && shoulderY != null && hipY != null) {
                 val earOrShoulderZone = shoulderY + (hipY - shoulderY) * 0.15f
                 if (wristY <= earOrShoulderZone) {

@@ -241,6 +241,13 @@ fun SajdaNavGraph(
                         },
                         initialTab = learnInitialTab,
                         onTabChanged = { learnInitialTab = it },
+                        onToggleTahoratAutoPlay = { steps ->
+                            if (mainUiState.tahoratAutoPlayActive) {
+                                mainViewModel.stopTahoratAutoPlay()
+                            } else {
+                                mainViewModel.startTahoratAutoPlay(steps)
+                            }
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                     2 -> WeeklyProgressScreen(
@@ -331,6 +338,7 @@ fun SajdaNavGraph(
                 onTogglePause = coachViewModel::togglePause,
                 onNextStep = coachViewModel::advanceToNextStep,
                 onStartNextTrack = coachViewModel::startNextContinuationTrack,
+                onExtendContinuation = { coachViewModel.extendContinuationCountdown(10) },
                 onSwitchToAudioOnly = {
                     coachViewModel.switchToAudioOnly(FallbackReason.USER_SELECTED)
                 },
@@ -354,6 +362,8 @@ fun SajdaNavGraph(
                 onSeatedModeToggle = mainViewModel::setSeatedPrayerMode,
                 onLargeTextModeToggle = mainViewModel::setLargeTextMode,
                 onLowPowerCameraToggle = mainViewModel::setLowPowerCameraMode,
+                onAutoBoostVolumeToggle = mainViewModel::setAutoBoostPrayerVolume,
+                onAcousticChimeToggle = mainViewModel::setAcousticChimeEnabled,
                 onSyncCalendarNow = mainViewModel::syncPrayerCalendarNow,
                 onExportBackupUri = mainViewModel::exportBackupToUri,
                 onImportBackupUri = mainViewModel::importBackupFromUri,

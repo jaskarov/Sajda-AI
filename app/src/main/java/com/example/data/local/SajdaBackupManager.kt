@@ -32,6 +32,8 @@ data class BackupSettings(
     val seatedPrayerMode: Boolean = false,
     val largeTextMode: Boolean = false,
     val lowPowerCameraMode: Boolean = false,
+    val autoBoostPrayerVolume: Boolean = true,
+    val acousticChimeEnabled: Boolean = true,
     val alarmMap: Map<String, Boolean> = emptyMap()
 )
 
@@ -99,6 +101,8 @@ class SajdaBackupManager(
                 seatedPrayerMode = settings.seatedPrayerMode,
                 largeTextMode = settings.largeTextMode,
                 lowPowerCameraMode = settings.lowPowerCameraMode,
+                autoBoostPrayerVolume = settings.autoBoostPrayerVolume,
+                acousticChimeEnabled = settings.acousticChimeEnabled,
                 alarmMap = settings.alarmMap.mapKeys { it.key.id }
             ),
             qazo = BackupQazo(
@@ -154,6 +158,8 @@ class SajdaBackupManager(
             seatedPrayerMode = payload.settings.seatedPrayerMode,
             largeTextMode = payload.settings.largeTextMode,
             lowPowerCameraMode = payload.settings.lowPowerCameraMode,
+            autoBoostPrayerVolume = payload.settings.autoBoostPrayerVolume,
+            acousticChimeEnabled = payload.settings.acousticChimeEnabled,
             alarmMap = restoredAlarms
         )
         prefsRepo.restoreSettings(restoredSettings)

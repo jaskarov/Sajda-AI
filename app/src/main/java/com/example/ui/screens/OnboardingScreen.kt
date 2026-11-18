@@ -110,7 +110,7 @@ fun OnboardingScreen(
                         shape = CircleShape
                     ) {
                         Text(
-                            text = lText("SAJDA AI • VIRTUAL USTOZ", "САЖДА AI • ВИРТУАЛ УСТОЗ")
+                            text = lText("NAMOZ USTOZ AI • VIRTUAL USTOZ", "НАМОЗ УСТОЗ AI • ВИРТУАЛ УСТОЗ")
                                 .get(selectedScript),
                             style = MaterialTheme.typography.labelMedium,
                             color = Color(0xFFFFE7B3),
@@ -200,32 +200,7 @@ fun OnboardingScreen(
                 }
             }
 
-            // 3. City Choice
-            SectionCard(
-                icon = Icons.Default.LocationOn,
-                title = lText("Shahringizni tanlang", "Шаҳрингизни танланг").get(selectedScript)
-            ) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    UzbekistanCities.all.forEach { city ->
-                        val isSelected = city.id == selectedCityId
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { selectedCityId = city.id },
-                            label = { Text(city.name.get(selectedScript)) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            modifier = Modifier.testTag("city_chip_${city.id}")
-                        )
-                    }
-                }
-            }
-
-            // 4. Comfort & Accessibility Mode (Standard vs Senior/Seated)
+            // 3. Comfort & Accessibility Mode (Standard vs Senior/Seated) - shown above city chips for elders
             SectionCard(
                 icon = Icons.Default.Accessible,
                 title = lText("Qanday qulaylik kerak?", "Қандай қулайлик керак?").get(selectedScript)
@@ -259,6 +234,31 @@ fun OnboardingScreen(
                             .weight(1f)
                             .testTag("onboarding_mode_senior")
                     )
+                }
+            }
+
+            // 4. City Choice
+            SectionCard(
+                icon = Icons.Default.LocationOn,
+                title = lText("Shahringizni tanlang", "Шаҳрингизни танланг").get(selectedScript)
+            ) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    UzbekistanCities.all.forEach { city ->
+                        val isSelected = city.id == selectedCityId
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedCityId = city.id },
+                            label = { Text(city.name.get(selectedScript)) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            modifier = Modifier.testTag("city_chip_${city.id}")
+                        )
+                    }
                 }
             }
 

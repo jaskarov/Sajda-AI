@@ -77,6 +77,8 @@ data class MainUiState(
     val lastCalendarSyncMillis: Long = 0L,
     val isCalendarSyncing: Boolean = false,
     val backupStatusMessage: com.example.domain.model.LText? = null,
+    val tahoratAutoPlayActive: Boolean = false,
+    val activeTahoratStepId: String? = null,
     val isReady: Boolean = false
 )
 
@@ -104,6 +106,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val weekOffsetFlow = MutableStateFlow(0)
     private val calendarSyncingFlow = MutableStateFlow(false)
     private val backupStatusMessageFlow = MutableStateFlow<com.example.domain.model.LText?>(null)
+    private val tahoratAutoPlayFlow = MutableStateFlow<Pair<Boolean, String?>>(false to null)
+    private var tahoratAutoPlayJob: kotlinx.coroutines.Job? = null
 
     private val weeklySummaryFlow = weekOffsetFlow.flatMapLatest { offset ->
         val (startKey, endKey) = WeeklyPrayerAnalytics.weekBounds(weekOffset = offset)
@@ -167,13 +171,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
+    private val auxFlow = combine(
+        backupStatusMessageFlow,
+        audioCoach.ttsReadiness,
+        tahoratAutoPlayFlow
+    ) { backupMsg, ttsReadiness, tahoratPair ->
+        Triple(backupMsg, ttsReadiness, tahoratPair)
+    }
+
     val uiState: StateFlow<MainUiState> = combine(
         prefsRepo.settingsFlow,
         databaseFlows,
         tickerFlow,
-        backupStatusMessageFlow,
-        audioCoach.ttsReadiness
-    ) { settings, dbBundle, nowMillis, backupMsg, ttsReadiness ->
+        auxFlow
+    ) { settings, dbBundle, nowMillis, aux ->
+        val (backupMsg, ttsReadiness, tahoratPair) = aux
         val city = UzbekistanCities.findById(settings.selectedCityId)
         val schedule = getPrayerTimesUseCase.calculateForToday(
             city = city,
@@ -202,6 +214,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lastCalendarSyncMillis = dbBundle.calendarBundle.latestSyncMillis,
             isCalendarSyncing = dbBundle.calendarBundle.isSyncing,
             backupStatusMessage = backupMsg,
+            tahoratAutoPlayActive = tahoratPair.first,
+            activeTahoratStepId = tahoratPair.second,
             isReady = true
         )
     }.stateIn(
@@ -395,6 +409,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefsRepo.setLowPowerCameraMode(enabled) }
     }
 
+    fun setAutoBoostPrayerVolume(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setAutoBoostPrayerVolume(enabled) }
+    }
+
+    fun setAcousticChimeEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setAcousticChimeEnabled(enabled) }
+    }
+
     fun incrementQazo(type: QazoPrayerType) {
         viewModelScope.launch { qazoRepo.increment(type) }
     }
@@ -443,6 +465,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun speakSample(text: String, audioAssetId: String = "") {
+        stopTahoratAutoPlay()
         val settings = uiState.value.settings
         audioCoach.speak(
             text = text,
@@ -453,8 +476,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun stopSampleAudio() {
+    fun startTahoratAutoPlay(steps: List<com.example.domain.model.PurificationGuideItem>) {
+        if (steps.isEmpty()) return
+        tahoratAutoPlayJob?.cancel()
+        tahoratAutoPlayJob = viewModelScope.launch {
+            val settings = uiState.value.settings
+            try {
+                for (step in steps) {
+                    tahoratAutoPlayFlow.value = true to step.id
+                    kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+                        audioCoach.speak(
+                            text = step.ttsPrompt,
+                            gender = settings.gender,
+                            preferOfflineMp3 = settings.preferOfflineMp3,
+                            speed = settings.voiceSpeed,
+                            audioAssetId = "",
+                            onCompleted = {
+                                if (cont.isActive) cont.resume(Unit) {}
+                            }
+                        )
+                    }
+                    delay(700L)
+                }
+            } finally {
+                tahoratAutoPlayFlow.value = false to null
+            }
+        }
+    }
+
+    fun stopTahoratAutoPlay() {
+        tahoratAutoPlayJob?.cancel()
+        tahoratAutoPlayJob = null
+        tahoratAutoPlayFlow.value = false to null
         audioCoach.stop()
+    }
+
+    fun stopSampleAudio() {
+        stopTahoratAutoPlay()
     }
 
     @SuppressLint("MissingPermission")

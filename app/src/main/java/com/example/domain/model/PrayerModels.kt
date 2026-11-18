@@ -116,7 +116,10 @@ enum class PrayerTrack(
     fun nextContinuationTrack(): PrayerTrack? = when (this) {
         BOMDOD_SUNNAT -> BOMDOD_FARZ
         PESHIN_SUNNAT_1 -> PESHIN_FARZ
-        XUFTON_FARZ -> VITR_VOJIB
+        PESHIN_FARZ -> PESHIN_SUNNAT_2
+        SHOM_FARZ -> SHOM_SUNNAT
+        XUFTON_FARZ -> XUFTON_SUNNAT
+        XUFTON_SUNNAT -> VITR_VOJIB
         else -> null
     }
 
@@ -278,7 +281,8 @@ data class PoseAnalysisSnapshot(
     val landmarks: List<NormalizedLandmark> = emptyList(),
     val imageWidth: Int = 480,
     val imageHeight: Int = 640,
-    val isFrontCamera: Boolean = true
+    val isFrontCamera: Boolean = true,
+    val headYawDirection: Int = 0
 )
 
 data class SurahLibraryItem(

@@ -313,6 +313,29 @@ fun CalibrationScreen(
                 Spacer(Modifier.size(48.dp))
             }
 
+            val qazoType = com.example.domain.model.QazoPrayerType.fromId(uiState.qazoTypeId)
+            if (qazoType != null) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = SaffronGold.copy(alpha = 0.24f),
+                    border = BorderStroke(1.dp, SaffronGold.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("calibration_qazo_badge")
+                ) {
+                    Text(
+                        text = lText(
+                            "Qazo namozi rejimi • Niyat: Zimmamdagi qazo ${qazoType.title.latin} farzini o‘qish",
+                            "Қазо намози режими • Ният: Зиммамдаги қазо ${qazoType.title.cyrillic} фарзини ўқиш"
+                        ).get(script),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color(0xFFFFE7B3),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                    )
+                }
+            }
+
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Color.Black.copy(alpha = 0.72f),

@@ -147,6 +147,12 @@ fun RakatProgressIndicator(
                         "Keyingi: Vitr",
                         "Кейинги: Витр"
                     ).get(script)
+                    nextContinuationTrack == PrayerTrack.PESHIN_SUNNAT_2 ||
+                        nextContinuationTrack == PrayerTrack.SHOM_SUNNAT ||
+                        nextContinuationTrack == PrayerTrack.XUFTON_SUNNAT -> lText(
+                        "Keyingi: Sunnat",
+                        "Кейинги: Суннат"
+                    ).get(script)
                     nextContinuationTrack != null -> lText(
                         "Keyingi: Farz",
                         "Кейинги: Фарз"

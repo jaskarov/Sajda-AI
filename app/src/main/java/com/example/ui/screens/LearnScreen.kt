@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Card
@@ -78,6 +79,7 @@ fun LearnScreen(
     onStartTrack: (PrayerTrack) -> Unit,
     initialTab: Int = 0,
     onTabChanged: (Int) -> Unit = {},
+    onToggleTahoratAutoPlay: (List<PurificationGuideItem>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
@@ -374,6 +376,67 @@ fun LearnScreen(
                         }
 
                         item {
+                            Card(
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (uiState.tahoratAutoPlayActive) {
+                                        PoseMatchedGreen.copy(alpha = 0.16f)
+                                    } else {
+                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                    }
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = lText(
+                                                "Qo‘lsiz ovozli mashq",
+                                                "Қўлсиз овозли машқ"
+                                            ).get(script),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = lText(
+                                                "Suv oldida telefonni ushlamasdan 8 qadamni ketma-ket tinglang.",
+                                                "Сув олдида телефонни ушламасдан 8 қадамни кетма-кет тингланг."
+                                            ).get(script),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Spacer(Modifier.width(8.dp))
+                                    FilledTonalButton(
+                                        onClick = { onToggleTahoratAutoPlay(wuduSteps) },
+                                        modifier = Modifier.testTag("tahorat_autoplay_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (uiState.tahoratAutoPlayActive) Icons.Default.Stop
+                                            else Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            text = if (uiState.tahoratAutoPlayActive) {
+                                                lText("To‘xtatish", "Тўхтатиш").get(script)
+                                            } else {
+                                                lText("Ketma-ket", "Кетма-кет").get(script)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
                             Text(
                                 text = PurificationCategory.WUDU.title.get(script),
                                 style = MaterialTheme.typography.titleMedium,
@@ -385,6 +448,7 @@ fun LearnScreen(
                             PurificationGuideCard(
                                 item = item,
                                 script = script,
+                                isCurrentlyPlaying = uiState.activeTahoratStepId == item.id,
                                 onPlayAudio = { onPlayAudio(item.ttsPrompt, "") }
                             )
                         }
@@ -702,15 +766,25 @@ private fun PurificationGuideCard(
     item: PurificationGuideItem,
     script: TextScript,
     onPlayAudio: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCurrentlyPlaying: Boolean = false
 ) {
     Card(
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCurrentlyPlaying) {
+                PoseMatchedGreen.copy(alpha = 0.14f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
         border = BorderStroke(
-            width = if (item.isFarz) 1.5.dp else 1.dp,
-            color = if (item.isFarz) PoseMatchedGreen.copy(alpha = 0.55f)
-            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+            width = if (isCurrentlyPlaying || item.isFarz) 1.5.dp else 1.dp,
+            color = when {
+                isCurrentlyPlaying -> PoseMatchedGreen
+                item.isFarz -> PoseMatchedGreen.copy(alpha = 0.55f)
+                else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+            }
         ),
         modifier = modifier.fillMaxWidth()
     ) {
