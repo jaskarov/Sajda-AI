@@ -152,7 +152,21 @@ enum class QazoPrayerType(
     ASR("asr", lText("Asr", "Аср"), lText("4 rakat farz", "4 ракат фарз")),
     SHOM("shom", lText("Shom", "Шом"), lText("3 rakat farz", "3 ракат фарз")),
     XUFTON("xufton", lText("Xufton", "Хуфтон"), lText("4 rakat farz", "4 ракат фарз")),
-    VITR("vitr", lText("Vitr", "Витр"), lText("3 rakat vojib", "3 ракат вожиб"))
+    VITR("vitr", lText("Vitr", "Витр"), lText("3 rakat vojib", "3 ракат вожиб"));
+
+    fun toPrayerTrack(): PrayerTrack = when (this) {
+        BOMDOD -> PrayerTrack.BOMDOD_FARZ
+        PESHIN -> PrayerTrack.PESHIN_FARZ
+        ASR -> PrayerTrack.ASR_FARZ
+        SHOM -> PrayerTrack.SHOM_FARZ
+        XUFTON -> PrayerTrack.XUFTON_FARZ
+        VITR -> PrayerTrack.VITR_VOJIB
+    }
+
+    companion object {
+        fun fromId(id: String?): QazoPrayerType? =
+            entries.firstOrNull { it.id == id }
+    }
 }
 
 enum class PrayerPose(
@@ -287,5 +301,22 @@ data class PostureGuideItem(
     val description: LText,
     val femaleNote: LText,
     val maleNote: LText,
+    val ttsPrompt: String
+)
+
+enum class PurificationCategory(val id: String, val title: LText) {
+    WUDU("wudu", lText("Tahorat tartibi (8 qadam)", "Таҳорат тартиби (8 қадам)")),
+    WUDU_BREAKERS("wudu_breakers", lText("Tahoratni buzadigan holatlar", "Таҳоратни бузадиган ҳолатлар")),
+    GHUSL_TAYAMMUM("ghusl_tayammum", lText("G‘usl va Tayammum", "Ғусл ва Таяммум"))
+}
+
+data class PurificationGuideItem(
+    val id: String,
+    val category: PurificationCategory,
+    val stepNumber: Int = 0,
+    val isFarz: Boolean = false,
+    val title: LText,
+    val ruleBadge: LText,
+    val description: LText,
     val ttsPrompt: String
 )

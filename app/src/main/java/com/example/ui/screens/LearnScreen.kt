@@ -26,8 +26,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -36,8 +38,8 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.DailyPrayerProgressEntity
@@ -56,6 +59,8 @@ import com.example.domain.engine.PrayerContentCatalog
 import com.example.domain.model.Gender
 import com.example.domain.model.PrayerTrack
 import com.example.domain.model.PrayerType
+import com.example.domain.model.PurificationCategory
+import com.example.domain.model.PurificationGuideItem
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
 import com.example.ui.theme.JetBrainsMonoFontFamily
@@ -71,15 +76,22 @@ fun LearnScreen(
     uiState: MainUiState,
     onPlayAudio: (String, String) -> Unit,
     onStartTrack: (PrayerTrack) -> Unit,
+    initialTab: Int = 0,
+    onTabChanged: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
     val gender = uiState.settings.gender
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableIntStateOf(initialTab.coerceIn(0, 3)) }
     var showAiDiagnostics by remember { mutableStateOf(false) }
 
+    LaunchedEffect(initialTab) {
+        selectedTab = initialTab.coerceIn(0, 3)
+    }
+
     val tabs = listOf(
-        lText("Harakatlar", "Ҳаракатлар").get(script),
+        lText("Harakat", "Ҳаракат").get(script),
+        lText("Tahorat", "Таҳорат").get(script),
         lText("Suralar", "Суралар").get(script),
         lText("Tarix", "Тарих").get(script)
     )
@@ -103,8 +115,8 @@ fun LearnScreen(
                 )
                 Text(
                     text = lText(
-                        "Har bir amal, burchaklar va suralarni ovozli tinglab mashq qiling",
-                        "Ҳар бир амал, бурчаклар ва сураларни овозли тинглаб машқ қилинг"
+                        "Tahorat, namoz ruknlari va suralarni ovozli tinglab mashq qiling",
+                        "Таҳорат, намоз рукнлари ва сураларни овозли тинглаб машқ қилинг"
                     ).get(script),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -115,16 +127,26 @@ fun LearnScreen(
                 tabs.forEachIndexed { idx, title ->
                     Tab(
                         selected = selectedTab == idx,
-                        onClick = { selectedTab = idx },
-                        text = { Text(title) },
+                        onClick = {
+                            selectedTab = idx
+                            onTabChanged(idx)
+                        },
+                        text = {
+                            Text(
+                                text = title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
                         icon = {
                             Icon(
                                 imageVector = when (idx) {
                                     0 -> Icons.Default.AccessibilityNew
-                                    1 -> Icons.Default.MenuBook
+                                    1 -> Icons.Default.WaterDrop
+                                    2 -> Icons.Default.MenuBook
                                     else -> Icons.Default.History
                                 },
-                                contentDescription = null
+                                contentDescription = title
                             )
                         },
                         modifier = Modifier.testTag("learn_tab_$idx")
@@ -300,7 +322,109 @@ fun LearnScreen(
                     }
                 }
 
-                1 -> LazyColumn(
+                1 -> {
+                    val wuduSteps = PrayerContentCatalog.purificationGuides.filter {
+                        it.category == PurificationCategory.WUDU
+                    }
+                    val breakers = PrayerContentCatalog.purificationGuides.filter {
+                        it.category == PurificationCategory.WUDU_BREAKERS
+                    }
+                    val ghuslAndTayammum = PrayerContentCatalog.purificationGuides.filter {
+                        it.category == PurificationCategory.GHUSL_TAYAMMUM
+                    }
+
+                    LazyColumn(
+                        modifier = Modifier.testTag("learn_tahorat_list"),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        item {
+                            Card(
+                                shape = RoundedCornerShape(20.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("wudu_farz_summary_card")
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = lText(
+                                            "Tahoratning 4 ta farzi (Hanafiy)",
+                                            "Таҳоратнинг 4 та фарзи (Ҳанафий)"
+                                        ).get(script),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = lText(
+                                            "1. Yuzni yuvish • 2. Qo‘llarni tirsakkacha yuvish • 3. Boshning 1/4 qismiga mas’h tortish • 4. Oyoqlarni to‘piqgacha yuvish.",
+                                            "1. Юзни ювиш • 2. Қўлларни тирсаккача ювиш • 3. Бошнинг 1/4 қисмига масъҳ тортиш • 4. Оёқларни тўпиқгача ювиш."
+                                        ).get(script),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
+                            }
+                        }
+
+                        item {
+                            Text(
+                                text = PurificationCategory.WUDU.title.get(script),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+
+                        items(wuduSteps, key = { it.id }) { item ->
+                            PurificationGuideCard(
+                                item = item,
+                                script = script,
+                                onPlayAudio = { onPlayAudio(item.ttsPrompt, "") }
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = PurificationCategory.WUDU_BREAKERS.title.get(script),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+
+                        items(breakers, key = { it.id }) { item ->
+                            PurificationGuideCard(
+                                item = item,
+                                script = script,
+                                modifier = Modifier.testTag("wudu_breakers_card"),
+                                onPlayAudio = { onPlayAudio(item.ttsPrompt, "") }
+                            )
+                        }
+
+                        item {
+                            Text(
+                                text = PurificationCategory.GHUSL_TAYAMMUM.title.get(script),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+
+                        items(ghuslAndTayammum, key = { it.id }) { item ->
+                            PurificationGuideCard(
+                                item = item,
+                                script = script,
+                                onPlayAudio = { onPlayAudio(item.ttsPrompt, "") }
+                            )
+                        }
+                    }
+                }
+
+                2 -> LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -567,6 +691,87 @@ private fun DailyProgressCard(day: DailyPrayerProgressEntity, script: TextScript
                             modifier = Modifier.padding(vertical = 6.dp, horizontal = 2.dp)
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PurificationGuideCard(
+    item: PurificationGuideItem,
+    script: TextScript,
+    onPlayAudio: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(
+            width = if (item.isFarz) 1.5.dp else 1.dp,
+            color = if (item.isFarz) PoseMatchedGreen.copy(alpha = 0.55f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val heading = if (item.stepNumber > 0) {
+                    "${item.stepNumber}. ${item.title.get(script)}"
+                } else {
+                    item.title.get(script)
+                }
+                Text(
+                    text = heading,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = if (item.isFarz) PoseMatchedGreen.copy(alpha = 0.16f)
+                    else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                ) {
+                    Text(
+                        text = item.ruleBadge.get(script),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (item.isFarz) PoseMatchedGreen
+                        else MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Text(
+                text = item.description.get(script),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                FilledTonalButton(
+                    onClick = onPlayAudio,
+                    modifier = Modifier.testTag("listen_wudu_${item.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeUp,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(lText("Tinglash", "Тинглаш").get(script))
                 }
             }
         }

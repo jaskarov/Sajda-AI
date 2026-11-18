@@ -36,6 +36,9 @@ interface PrayerCalendarDao {
     @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE cityId = :cityId AND year = :year")
     suspend fun countForCityYear(cityId: String, year: Int): Int
 
+    @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE year = :year")
+    suspend fun countForYear(year: Int): Int
+
     @Query("SELECT COUNT(*) FROM prayer_calendar_days")
     suspend fun countAll(): Int
 

@@ -37,6 +37,12 @@ sealed interface AudioCoachStatus {
     data class Error(val message: String) : AudioCoachStatus
 }
 
+data class TtsReadinessInfo(
+    val isEngineReady: Boolean = false,
+    val hasUzbekLocale: Boolean = false,
+    val hasFallbackLocale: Boolean = false
+)
+
 /**
  * 100% Offline-capable Prayer Audio Coach:
  * 1) Plays bundled res/raw MP3 Qori recitations & duas via Media3 ExoPlayer
@@ -92,6 +98,9 @@ class PrayerAudioCoach(private val context: Context) {
 
     private val _status = MutableStateFlow<AudioCoachStatus>(AudioCoachStatus.Idle)
     val status: StateFlow<AudioCoachStatus> = _status.asStateFlow()
+
+    private val _ttsReadiness = MutableStateFlow(TtsReadinessInfo())
+    val ttsReadiness: StateFlow<TtsReadinessInfo> = _ttsReadiness.asStateFlow()
 
     private val _playbackProgress = MutableStateFlow(0f)
     val playbackProgress: StateFlow<Float> = _playbackProgress.asStateFlow()
@@ -161,16 +170,24 @@ class PrayerAudioCoach(private val context: Context) {
                 if (statusCode == TextToSpeech.SUCCESS) {
                     val engine = localTts
                     if (engine != null) {
+                        val uzAvailable = runCatching {
+                            engine.isLanguageAvailable(Locale.forLanguageTag("uz-UZ")) >= TextToSpeech.LANG_AVAILABLE
+                        }.getOrDefault(false)
+                        val trAvailable = runCatching {
+                            engine.isLanguageAvailable(Locale.forLanguageTag("tr-TR")) >= TextToSpeech.LANG_AVAILABLE
+                        }.getOrDefault(false)
                         val candidates = listOf(
                             Locale.forLanguageTag("uz-UZ"),
                             Locale.forLanguageTag("tr-TR"),
                             Locale.ENGLISH,
                             Locale.getDefault()
                         )
+                        var anyReady = false
                         for (locale in candidates) {
                             val availability = engine.isLanguageAvailable(locale)
                             if (availability >= TextToSpeech.LANG_AVAILABLE) {
                                 engine.language = locale
+                                anyReady = true
                                 break
                             }
                         }
@@ -183,9 +200,15 @@ class PrayerAudioCoach(private val context: Context) {
                             )
                         }
                         isLocalTtsReady = true
+                        _ttsReadiness.value = TtsReadinessInfo(
+                            isEngineReady = true,
+                            hasUzbekLocale = uzAvailable,
+                            hasFallbackLocale = trAvailable || anyReady
+                        )
                     }
                 } else {
                     Log.w(TAG, "Device TextToSpeech engine unavailable (code=$statusCode)")
+                    _ttsReadiness.value = TtsReadinessInfo(isEngineReady = false)
                 }
             }
             localTts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {

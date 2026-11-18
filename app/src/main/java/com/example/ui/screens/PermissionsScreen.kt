@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
@@ -130,6 +132,11 @@ fun PermissionsScreen(
         }
     }
 
+    val batteryOptimizationIgnored = remember(refreshTick) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+    }
+
     val runtimePermsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -174,6 +181,20 @@ fun PermissionsScreen(
                 exactAlarmSettingsLauncher.launch(fallback)
             }
         }
+    }
+
+    val openBatteryOptimizationSettings: () -> Unit = {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        runCatching {
+            exactAlarmSettingsLauncher.launch(intent)
+        }.onFailure {
+            val fallback = Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${context.packageName}")
+            )
+            runCatching { exactAlarmSettingsLauncher.launch(fallback) }
+        }
+        Unit
     }
 
     Box(
@@ -326,6 +347,24 @@ fun PermissionsScreen(
                 onAction = openExactAlarmSettings,
                 script = script,
                 testTag = "permission_exact_alarm_button"
+            )
+
+            // 5. Battery Optimization (MIUI / Samsung background reliability)
+            PermissionCard(
+                icon = Icons.Default.BatteryChargingFull,
+                title = lText(
+                    "Batareya cheklovisiz azon (Xiaomi / Samsung)",
+                    "Батарея чекловисиз азон (Xiaomi / Samsung)"
+                ).get(script),
+                description = lText(
+                    "Telefon uxlaganda azon signali to‘xtab qolmasligi uchun tizim sozlamalarida Sajda AI uchun \"Cheklanmagan\" (Unrestricted) rejimini tanlang.",
+                    "Телефон ухлаганда азон сигнали тўхтаб қолмаслиги учун тизим созламаларида Sajda AI учун «Чекланмаган» (Unrestricted) режимини танланг."
+                ).get(script),
+                granted = batteryOptimizationIgnored,
+                actionLabel = lText("Batareya sozlamalarini ochish", "Батарея созламаларини очиш").get(script),
+                onAction = openBatteryOptimizationSettings,
+                script = script,
+                testTag = "permission_battery_button"
             )
 
             if (!cameraGranted || !locationGranted || !notificationsGranted) {

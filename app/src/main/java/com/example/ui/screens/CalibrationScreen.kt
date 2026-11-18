@@ -197,6 +197,7 @@ fun CalibrationScreen(
                 isMatched = isReady,
                 enabled = !releasingForTransition,
                 seatedMode = uiState.settings.seatedPrayerMode,
+                lowPowerMode = uiState.settings.lowPowerCameraMode,
                 modifier = Modifier.fillMaxSize()
             )
         } else {

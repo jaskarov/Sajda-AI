@@ -30,11 +30,13 @@ class PrayerPoseAnalyzer(
     @Volatile var isFrontCamera: Boolean = true,
     private val darkLuminanceThreshold: Float = 28f,
     @Volatile var seatedMode: Boolean = false,
+    @Volatile var lowPowerMode: Boolean = false,
     private val onPoseResult: (PoseAnalysisSnapshot) -> Unit
 ) : ImageAnalysis.Analyzer {
 
     companion object {
         private const val MIN_FRAME_INTERVAL_MS = 66L // ~15 FPS
+        private const val LOW_POWER_FRAME_INTERVAL_MS = 125L // ~8 FPS for budget phones
         private const val DEBOUNCE_DURATION_MS = 400L
         private const val DARK_FRAMES_TRIGGER_COUNT = 25 // ~1.7-2.5s of dark frames
         private const val MIN_CONFIDENCE = 0.45f
@@ -170,6 +172,9 @@ class PrayerPoseAnalyzer(
 
     private val poseHelper = PoseDetectionAnalyzerHelper(
         minFrameIntervalMs = MIN_FRAME_INTERVAL_MS,
+        frameIntervalProvider = {
+            if (lowPowerMode) LOW_POWER_FRAME_INTERVAL_MS else MIN_FRAME_INTERVAL_MS
+        },
         onPreInspectFrame = { imageProxy ->
             val luminance = estimateLuminance(imageProxy)
             if (luminance < darkLuminanceThreshold) {

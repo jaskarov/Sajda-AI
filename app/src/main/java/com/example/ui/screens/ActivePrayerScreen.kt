@@ -394,6 +394,7 @@ fun ActivePrayerScreen(
                                     showSkeleton = true,
                                     isMatched = isPoseAligned,
                                     seatedMode = isSeatedMode,
+                                    lowPowerMode = uiState.settings.lowPowerCameraMode,
                                     modifier = Modifier.fillMaxSize()
                                 )
 
@@ -883,6 +884,30 @@ private fun PrayerCompletedView(
                     color = NightGold,
                     textAlign = TextAlign.Center
                 )
+
+                val completedQazoType = com.example.domain.model.QazoPrayerType.fromId(uiState.qazoTypeId)
+                if (uiState.qazoDecrementedOnCompletion && completedQazoType != null) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = PoseMatchedGreen.copy(alpha = 0.18f),
+                        border = BorderStroke(1.dp, PoseMatchedGreen.copy(alpha = 0.6f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("qazo_completed_badge")
+                    ) {
+                        Text(
+                            text = lText(
+                                "Qazo daftaridan 1 ta ${completedQazoType.title.latin} kamaytirildi ✓",
+                                "Қазо дафтаридан 1 та ${completedQazoType.title.cyrillic} камайтирилди ✓"
+                            ).get(script),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = PoseMatchedGreen,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                        )
+                    }
+                }
 
                 if (nextTrack != null) {
                     val isVitrNext = nextTrack == PrayerTrack.VITR_VOJIB

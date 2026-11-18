@@ -15,6 +15,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,16 +30,21 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -46,8 +53,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -107,6 +117,8 @@ fun WeeklyProgressScreen(
     onTogglePrayerForDay: (String, PrayerType) -> Unit,
     onIncrementQazo: (QazoPrayerType) -> Unit = {},
     onDecrementQazo: (QazoPrayerType) -> Unit = {},
+    onAddQazoYears: (Int) -> Unit = {},
+    onPrayQazo: (QazoPrayerType) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
@@ -310,7 +322,9 @@ fun WeeklyProgressScreen(
                     qazoProgress = uiState.qazoProgress,
                     script = script,
                     onIncrement = onIncrementQazo,
-                    onDecrement = onDecrementQazo
+                    onDecrement = onDecrementQazo,
+                    onAddYears = onAddQazoYears,
+                    onPrayQazo = onPrayQazo
                 )
             }
 
@@ -1077,14 +1091,21 @@ private fun WeeklyPrayerMatrixCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun QazoLedgerCard(
     qazoProgress: QazoPrayerEntity,
     script: TextScript,
     onIncrement: (QazoPrayerType) -> Unit,
-    onDecrement: (QazoPrayerType) -> Unit
+    onDecrement: (QazoPrayerType) -> Unit,
+    onAddYears: (Int) -> Unit = {},
+    onPrayQazo: (QazoPrayerType) -> Unit = {}
 ) {
     val totalRemaining = qazoProgress.totalCount()
+    var showCalculator by remember { mutableStateOf(false) }
+    var yearsInput by remember { mutableStateOf("1") }
+    val parsedYears = yearsInput.toIntOrNull()?.coerceIn(1, 50) ?: 0
+
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1143,6 +1164,147 @@ private fun QazoLedgerCard(
                 }
             }
 
+            // Calculator Toggle + Daily Plan Summary
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { showCalculator = !showCalculator },
+                    modifier = Modifier.testTag("qazo_calculator_toggle")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Calculate,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = lText(
+                            "Yillar bo‘yicha kalkulyator",
+                            "Йиллар бўйича калькулятор"
+                        ).get(script),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = showCalculator) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("qazo_calculator_panel")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = lText(
+                                "Necha yillik qazo namozingiz bor? (1 yil = har bir namozdan 365 ta)",
+                                "Неча йиллик қазо намозингиз бор? (1 йил = ҳар бир намоздан 365 та)"
+                            ).get(script),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            listOf(1, 3, 5, 10).forEach { y ->
+                                FilterChip(
+                                    selected = yearsInput == y.toString(),
+                                    onClick = { yearsInput = y.toString() },
+                                    label = {
+                                        Text(
+                                            text = lText("$y yil", "$y йил").get(script),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    },
+                                    modifier = Modifier.testTag("qazo_calc_chip_$y")
+                                )
+                            }
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = yearsInput,
+                                onValueChange = { raw ->
+                                    yearsInput = raw.filter { it.isDigit() }.take(2)
+                                },
+                                label = { Text(lText("Yil", "Йил").get(script)) },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier
+                                    .width(100.dp)
+                                    .testTag("qazo_years_input")
+                            )
+
+                            Button(
+                                onClick = {
+                                    if (parsedYears > 0) {
+                                        onAddYears(parsedYears)
+                                        showCalculator = false
+                                    }
+                                },
+                                enabled = parsedYears > 0,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(48.dp)
+                                    .testTag("qazo_calculator_apply_button")
+                            ) {
+                                Text(
+                                    text = lText(
+                                        "Qo‘shish (+${parsedYears * 365})",
+                                        "Қўшиш (+${parsedYears * 365})"
+                                    ).get(script),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (totalRemaining > 0) {
+                val dailySetDays = maxOf(
+                    qazoProgress.bomdodCount,
+                    qazoProgress.peshinCount,
+                    qazoProgress.asrCount,
+                    qazoProgress.shomCount,
+                    qazoProgress.xuftonCount,
+                    qazoProgress.vitrCount
+                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("qazo_plan_summary")
+                ) {
+                    Text(
+                        text = lText(
+                            "Reja: Kuniga 1 ta qazo o‘qisangiz ~$totalRemaining kun • Har kuni 1 kunlik to‘plam o‘qisangiz ~$dailySetDays kunda tugaydi.",
+                            "Режа: Кунига 1 та қазо ўқисангиз ~$totalRemaining кун • Ҳар куни 1 кунлик тўплам ўқисангиз ~$dailySetDays кунда тугайди."
+                        ).get(script),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(10.dp)
+                    )
+                }
+            }
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
             QazoPrayerType.entries.forEachIndexed { index, type ->
@@ -1150,11 +1312,14 @@ private fun QazoLedgerCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 2.dp),
+                        .padding(vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
                             text = type.title.get(script),
                             style = MaterialTheme.typography.titleSmall,
@@ -1166,6 +1331,22 @@ private fun QazoLedgerCard(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        FilledTonalButton(
+                            onClick = { onPrayQazo(type) },
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.testTag("qazo_pray_${type.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = lText("O‘qish", "Ўқиш").get(script),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
                     }
 
                     Row(

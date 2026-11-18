@@ -54,4 +54,23 @@ data class QazoPrayerEntity(
             QazoPrayerType.VITR -> copy(vitrCount = safe, updatedAtMillis = timestampMillis)
         }
     }
+
+    fun addBulkForYears(
+        years: Int,
+        timestampMillis: Long = System.currentTimeMillis()
+    ): QazoPrayerEntity {
+        val safeYears = years.coerceIn(0, 100)
+        if (safeYears == 0) return this
+        val daysToAdd = safeYears * 365
+        val maxCap = 36_500
+        return copy(
+            bomdodCount = (bomdodCount + daysToAdd).coerceAtMost(maxCap),
+            peshinCount = (peshinCount + daysToAdd).coerceAtMost(maxCap),
+            asrCount = (asrCount + daysToAdd).coerceAtMost(maxCap),
+            shomCount = (shomCount + daysToAdd).coerceAtMost(maxCap),
+            xuftonCount = (xuftonCount + daysToAdd).coerceAtMost(maxCap),
+            vitrCount = (vitrCount + daysToAdd).coerceAtMost(maxCap),
+            updatedAtMillis = timestampMillis
+        )
+    }
 }

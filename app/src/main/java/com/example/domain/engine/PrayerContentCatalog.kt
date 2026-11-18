@@ -2,6 +2,8 @@ package com.example.domain.engine
 
 import com.example.domain.model.PostureGuideItem
 import com.example.domain.model.PrayerPose
+import com.example.domain.model.PurificationCategory
+import com.example.domain.model.PurificationGuideItem
 import com.example.domain.model.SurahLibraryItem
 import com.example.domain.model.lText
 
@@ -209,6 +211,148 @@ object PrayerContentCatalog {
                 "Икки оёқ ўнг томонга чиқарилиб ихчам ўтирилади."
             ),
             ttsPrompt = "Qa'dada xotirjam o'tiring va Attahiyatni o'qing."
+        )
+    )
+
+    val purificationGuides: List<PurificationGuideItem> = listOf(
+        PurificationGuideItem(
+            id = "wudu_step_1",
+            category = PurificationCategory.WUDU,
+            stepNumber = 1,
+            isFarz = false,
+            title = lText("Niyat va Bismillah", "Ният ва Бисмиллаҳ"),
+            ruleBadge = lText("Sunnat", "Суннат"),
+            description = lText(
+                "Qalbda tahorat olish niyat qilinadi va «Bismillahir Rohmanir Rohiym» deb boshlanadi.",
+                "Қалбда таҳорат олиш ният қилинади ва «Бисмиллаҳир Роҳманир Роҳийм» деб бошланади."
+            ),
+            ttsPrompt = "Tahoratni qalbda niyat qilib, Bismillahir Rohmanir Rohiym deb boshlang."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_2",
+            category = PurificationCategory.WUDU,
+            stepNumber = 2,
+            isFarz = false,
+            title = lText("Qo‘llarni bilakkacha yuvish", "Қўлларни билаккача ювиш"),
+            ruleBadge = lText("Sunnat • 3 marta", "Суннат • 3 марта"),
+            description = lText(
+                "Ikki qo‘l bilaklargacha, barmoqlar oralarini hilol qilib 3 marta yuviladi.",
+                "Икки қўл билакларгача, бармоқлар ораларини ҳилол қилиб 3 марта ювилади."
+            ),
+            ttsPrompt = "Ikki qo'lni bilakkacha va barmoqlar orasini uch marta yaxshilab yuving."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_3",
+            category = PurificationCategory.WUDU,
+            stepNumber = 3,
+            isFarz = false,
+            title = lText("Og‘iz va burunni chayish", "Оғиз ва бурунни чайиш"),
+            ruleBadge = lText("Sunnat • 3 marta", "Суннат • 3 марта"),
+            description = lText(
+                "Avval o‘ng qo‘l bilan 3 marta og‘iz chayiladi (ro‘zador bo‘lmasa g‘arg‘ara), so‘ng 3 marta burunga suv olib chap qo‘l bilan qoqiladi.",
+                "Аввал ўнг қўл билан 3 марта оғиз чайилади (рўзадор бўлмаса ғарғара), сўнг 3 марта бурунга сув олиб чап қўл билан қоқилади."
+            ),
+            ttsPrompt = "Uch marta og'zingizni chaying, so'ng uch marta burunga suv olib chap qo'l bilan qoqing."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_4",
+            category = PurificationCategory.WUDU,
+            stepNumber = 4,
+            isFarz = true,
+            title = lText("Yuzni yuvish", "Юзни ювиш"),
+            ruleBadge = lText("1-FARZ • 3 marta", "1-ФАРЗ • 3 марта"),
+            description = lText(
+                "Soch chiqqan joydan iyak ostigacha, bir quloq yumshog‘idan ikkinchisigacha bo‘lgan yuz qismi quruq joy qoldirmay 3 marta yuviladi.",
+                "Соч чиққан жойдан ияк остигача, бир қулоқ юмшоғидан иккинчисигача бўлган юз қисми қуруқ жой қолдирмай 3 марта ювилади."
+            ),
+            ttsPrompt = "Birinchi farz: yuzingizni peshonadan iyak ostigacha va bir quloqdan ikkinchisigacha uch marta yuving."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_5",
+            category = PurificationCategory.WUDU,
+            stepNumber = 5,
+            isFarz = true,
+            title = lText("Qo‘llarni tirsak bilan yuvish", "Қўлларни тирсак билан ювиш"),
+            ruleBadge = lText("2-FARZ • 3 marta", "2-ФАРЗ • 3 марта"),
+            description = lText(
+                "Avval o‘ng qo‘l, keyin chap qo‘l barmoq uchlaridan tirsaklarni ham qo‘shib 3 martadan yuviladi.",
+                "Аввал ўнг қўл, кейин чап қўл бармоқ учларидан тирсакларни ҳам қўшиб 3 мартадан ювилади."
+            ),
+            ttsPrompt = "Ikkinchi farz: avval o'ng qo'lni, so'ng chap qo'lni tirsaklari bilan qo'shib uch martadan yuving."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_6",
+            category = PurificationCategory.WUDU,
+            stepNumber = 6,
+            isFarz = true,
+            title = lText("Boshga mas’h tortish", "Бошга масъҳ тортиш"),
+            ruleBadge = lText("3-FARZ • 1 marta", "3-ФАРЗ • 1 марта"),
+            description = lText(
+                "Ho‘llangan kaftlar bilan boshning kamida to‘rtdan bir qismiga mas’h tortiladi; so‘ng ko‘rsatkich barmoq bilan quloq ichi, bosh barmoq bilan quloq orqasi va qo‘l orqasi bilan bo‘yin artiladi.",
+                "Ҳўлланган кафтлар билан бошнинг камида тўртдан бир қисмига масъҳ тортилади; сўнг кўрсаткич бармоқ билан қулоқ ичи, бош бармоқ билан қулоқ орқаси ва қўл орқаси билан бўйин артилади."
+            ),
+            ttsPrompt = "Uchinchi farz: ho'l kaftlar bilan boshingizga, quloqlaringizga va bo'yningizga bir marta mas'h torting."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_7",
+            category = PurificationCategory.WUDU,
+            stepNumber = 7,
+            isFarz = true,
+            title = lText("Oyoqlarni to‘piq bilan yuvish", "Оёқларни тўпиқ билан ювиш"),
+            ruleBadge = lText("4-FARZ • 3 marta", "4-ФАРЗ • 3 марта"),
+            description = lText(
+                "Avval o‘ng oyoq, keyin chap oyoq barmoqlar orasini hilol qilib to‘piqlari bilan qo‘shib 3 martadan yuviladi.",
+                "Аввал ўнг оёқ, кейин чап оёқ бармоқлар орасини ҳилол қилиб тўпиқлари билан қўшиб 3 мартадан ювилади."
+            ),
+            ttsPrompt = "To'rtinchi farz: avval o'ng oyoqni, so'ng chap oyoqni to'piqlari bilan qo'shib uch martadan yuving."
+        ),
+        PurificationGuideItem(
+            id = "wudu_step_8",
+            category = PurificationCategory.WUDU,
+            stepNumber = 8,
+            isFarz = false,
+            title = lText("Tahorat duosi", "Таҳорат дуоси"),
+            ruleBadge = lText("Sunnat", "Суннат"),
+            description = lText(
+                "Tahoratdan so‘ng Qiblaga qarab: «Ashhadu alla ilaha illallohu vahdahu la sharika lah va ashhadu anna Muhammadan ‘abduhu va rosuluh» deyiladi.",
+                "Таҳоратдан сўнг Қиблага қараб: «Ашҳаду алла илаҳа иллаллоҳу ваҳдаҳу ла шарика лаҳ ва ашҳаду анна Муҳаммадан ъабдуҳу ва росулуҳ» дейилади."
+            ),
+            ttsPrompt = "Tahorat yakunida Qiblaga qarab shahodat kalimasini ayting."
+        ),
+        PurificationGuideItem(
+            id = "wudu_breakers_summary",
+            category = PurificationCategory.WUDU_BREAKERS,
+            title = lText("Tahoratni sindiruvchi asosiy holatlar", "Таҳоратни синдирувчи асосий ҳолатлар"),
+            ruleBadge = lText("Hanafiy fiqhi", "Ҳанафий фиқҳи"),
+            description = lText(
+                "1) Old va orqa yo‘llardan biror narsa yoki yel chiqishi;\n2) Badandan qon yoki yiring chiqib, chiqqan joyidan oqib ketishi;\n3) Og‘iz to‘lib qusish;\n4) Yotib yoki biror narsaga suyanib chuqur uxlash, hushdan ketish;\n5) Ruku va sajdali namozda yonidagilar eshitadigan darajada kulish.",
+                "1) Олд ва орқа йўллардан бирор нарса ёки ел чиқиши;\n2) Бадандан қон ёки йиринг чиқиб, чиққан жойидан оқиб кетиши;\n3) Оғиз тўлиб қусиш;\n4) Ётиб ёки бирор нарсага суяниб чуқур ухлаш, ҳушдан кетиш;\n5) Руку ва саждали намозда ёнидагилар эшитадиган даражада кулиш."
+            ),
+            ttsPrompt = "Tahoratni buzadigan holatlar: tabiiy yo'ldan chiqindilar yoki yel chiqishi, qon oqishi, og'iz to'ldirib qusish, suyanib yoki yotib uxlash va namozda kulish."
+        ),
+        PurificationGuideItem(
+            id = "ghusl_farz",
+            category = PurificationCategory.GHUSL_TAYAMMUM,
+            isFarz = true,
+            title = lText("G‘usl (3 ta farz)", "Ғусл (3 та фарз)"),
+            ruleBadge = lText("3 ta farz", "3 та фарз"),
+            description = lText(
+                "G‘uslning 3 ta farzi bor:\n1) Og‘izni suv bilan to‘liq chayish (g‘arg‘ara);\n2) Burunni achishguncha suv bilan yuvish;\n3) Butun badanning har bir qismiga quruq joy qoldirmay suv yetkazish.",
+                "Ғуслнинг 3 та фарзи бор:\n1) Оғизни сув билан тўлиқ чайиш (ғарғара);\n2) Бурунни ачишгунча сув билан ювиш;\n3) Бутун баданнинг ҳар бир қисмига қуруқ жой қолдирмай сув етказиш."
+            ),
+            ttsPrompt = "G'uslning uchta farzi: og'izni g'arg'ara qilib chayish, burunga suv tortish va butun badanni quruq joy qoldirmay yuvish."
+        ),
+        PurificationGuideItem(
+            id = "tayammum_farz",
+            category = PurificationCategory.GHUSL_TAYAMMUM,
+            isFarz = true,
+            title = lText("Tayammum (2 ta farz)", "Таяммум (2 та фарз)"),
+            ruleBadge = lText("Uzrli holatda", "Узрли ҳолатда"),
+            description = lText(
+                "Suv topilmaganda yoki suv ishlatish sog‘liqqa zarar yetkazganda qilinadi:\n1) Niyat qilish;\n2) Pok tuproq, qum yoki changli toshga ikki qo‘lni urib yuzga mas’h tortish, so‘ng yana urib qo‘llarni tirsaklari bilan mas’h qilish.",
+                "Сув топилмаганда ёки сув ишлатиш соғлиққа зарар етказганда қилинади:\n1) Ният қилиш;\n2) Пок тупроқ, қум ёки чангли тошга икки қўлни уриб юзга масъҳ тортиш, сўнг яна уриб қўлларни тирсаклари билан масъҳ қилиш."
+            ),
+            ttsPrompt = "Suv bo'lmaganda yoki kasallik sababli tayammum qilinadi: avval niyat qilib pok tuproqqa kaftlarni urib yuzga, so'ng yana urib qo'llarga tirsakkacha mas'h tortiladi."
         )
     )
 }

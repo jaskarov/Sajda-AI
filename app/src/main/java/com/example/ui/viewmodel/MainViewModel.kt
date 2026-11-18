@@ -7,11 +7,13 @@ import android.hardware.GeomagneticField
 import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.alarm.PrayerWorkScheduler
 import com.example.audio.AudioCoachStatus
 import com.example.audio.PrayerAudioCoach
+import com.example.data.local.BackupRestoreResult
 import com.example.data.local.DailyPrayerProgressEntity
 import com.example.data.local.PrayerCalendarDayEntity
 import com.example.data.local.PrayerCalendarRepository
@@ -19,6 +21,7 @@ import com.example.data.local.PrayerHistoryEntity
 import com.example.data.local.PrayerHistoryRepository
 import com.example.data.local.QazoPrayerEntity
 import com.example.data.local.QazoPrayerRepository
+import com.example.data.local.SajdaBackupManager
 import com.example.data.local.SajdaDatabase
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserSettings
@@ -69,9 +72,11 @@ data class MainUiState(
     val compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
     val hasCompassSensor: Boolean = true,
     val audioStatus: AudioCoachStatus = AudioCoachStatus.Idle,
+    val ttsReadiness: com.example.audio.TtsReadinessInfo = com.example.audio.TtsReadinessInfo(),
     val calendarSource: String = "uz_taqvim_365",
     val lastCalendarSyncMillis: Long = 0L,
     val isCalendarSyncing: Boolean = false,
+    val backupStatusMessage: com.example.domain.model.LText? = null,
     val isReady: Boolean = false
 )
 
@@ -89,6 +94,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         database.prayerCalendarDao()
     )
     private val qazoRepo = QazoPrayerRepository(database.qazoPrayerDao())
+    private val backupManager = SajdaBackupManager(prefsRepo, historyRepo, qazoRepo)
     private val getPrayerTimesUseCase = GetPrayerTimesUseCase()
     private val workScheduler = PrayerWorkScheduler(application)
     private val compassSensor = QiblaCompassSensor(application)
@@ -97,6 +103,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val tickerFlow = MutableStateFlow(System.currentTimeMillis())
     private val weekOffsetFlow = MutableStateFlow(0)
     private val calendarSyncingFlow = MutableStateFlow(false)
+    private val backupStatusMessageFlow = MutableStateFlow<com.example.domain.model.LText?>(null)
 
     private val weeklySummaryFlow = weekOffsetFlow.flatMapLatest { offset ->
         val (startKey, endKey) = WeeklyPrayerAnalytics.weekBounds(weekOffset = offset)
@@ -163,8 +170,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = combine(
         prefsRepo.settingsFlow,
         databaseFlows,
-        tickerFlow
-    ) { settings, dbBundle, nowMillis ->
+        tickerFlow,
+        backupStatusMessageFlow,
+        audioCoach.ttsReadiness
+    ) { settings, dbBundle, nowMillis, backupMsg, ttsReadiness ->
         val city = UzbekistanCities.findById(settings.selectedCityId)
         val schedule = getPrayerTimesUseCase.calculateForToday(
             city = city,
@@ -188,9 +197,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             compassAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
             hasCompassSensor = true,
             audioStatus = audioCoach.status.value,
+            ttsReadiness = ttsReadiness,
             calendarSource = dbBundle.calendarBundle.todayDay?.source ?: "uz_taqvim_365",
             lastCalendarSyncMillis = dbBundle.calendarBundle.latestSyncMillis,
             isCalendarSyncing = dbBundle.calendarBundle.isSyncing,
+            backupStatusMessage = backupMsg,
             isReady = true
         )
     }.stateIn(
@@ -231,6 +242,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             calendarRepo.ensureSeededFromAssets()
+            calendarRepo.ensureYearSeededOffline(2027)
+            val nowYear = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent"))
+                .get(java.util.Calendar.YEAR)
+            if (nowYear >= 2027) {
+                calendarRepo.ensureYearSeededOffline(nowYear)
+                calendarRepo.ensureYearSeededOffline(nowYear + 1)
+            }
             val initialSettings = prefsRepo.settingsFlow.first()
             calendarRepo.syncFromNetworkIfConnected(initialSettings.selectedCityId)
             rescheduleAlarms()
@@ -257,6 +275,60 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun exportBackupToUri(uri: Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val jsonText = backupManager.exportToJson()
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use { stream ->
+                    stream.write(jsonText.toByteArray(Charsets.UTF_8))
+                } ?: error("Faylga yozib bo‘lmadi")
+            }.onSuccess {
+                backupStatusMessageFlow.value = com.example.domain.model.lText(
+                    "Zaxira nusxa muvaffaqiyatli saqlandi",
+                    "Захира нусха муваффақиятли сақланди"
+                )
+            }.onFailure { err ->
+                backupStatusMessageFlow.value = com.example.domain.model.lText(
+                    "Saqlashda xatolik: ${err.localizedMessage ?: "noma'lum"}",
+                    "Сақлашда хатолик: ${err.localizedMessage ?: "номаълум"}"
+                )
+            }
+        }
+    }
+
+    fun importBackupFromUri(uri: Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val result = runCatching {
+                val raw = getApplication<Application>().contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.bufferedReader(Charsets.UTF_8).readText()
+                } ?: ""
+                backupManager.importFromJson(raw)
+            }.getOrElse { err ->
+                BackupRestoreResult.Failure(err.localizedMessage ?: "O‘qib bo‘lmadi")
+            }
+
+            when (result) {
+                is BackupRestoreResult.Success -> {
+                    rescheduleAlarms()
+                    backupStatusMessageFlow.value = com.example.domain.model.lText(
+                        "Tiklandi: ${result.daysRestored} kun tarix, ${result.qazoTotal} ta qazo",
+                        "Тикланди: ${result.daysRestored} кун тарих, ${result.qazoTotal} та қазо"
+                    )
+                }
+                is BackupRestoreResult.Failure -> {
+                    backupStatusMessageFlow.value = com.example.domain.model.lText(
+                        "Tiklash xatosi: ${result.reason}",
+                        "Тиклаш хатоси: ${result.reason}"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearBackupMessage() {
+        backupStatusMessageFlow.value = null
+    }
+
     fun shiftWeek(delta: Int) {
         val next = (weekOffsetFlow.value + delta).coerceAtMost(0)
         weekOffsetFlow.value = next
@@ -266,9 +338,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         weekOffsetFlow.value = 0
     }
 
-    fun completeOnboarding(gender: Gender, script: TextScript, cityId: String) {
+    fun completeOnboarding(
+        gender: Gender,
+        script: TextScript,
+        cityId: String,
+        seatedPrayerMode: Boolean = false,
+        largeTextMode: Boolean = false
+    ) {
         viewModelScope.launch {
-            prefsRepo.completeOnboarding(gender, script, cityId)
+            prefsRepo.completeOnboarding(gender, script, cityId, seatedPrayerMode, largeTextMode)
             calendarRepo.syncFromNetworkIfConnected(cityId)
             rescheduleAlarms()
         }
@@ -309,12 +387,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefsRepo.setSeatedPrayerMode(enabled) }
     }
 
+    fun setLargeTextMode(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setLargeTextMode(enabled) }
+    }
+
+    fun setLowPowerCameraMode(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setLowPowerCameraMode(enabled) }
+    }
+
     fun incrementQazo(type: QazoPrayerType) {
         viewModelScope.launch { qazoRepo.increment(type) }
     }
 
     fun decrementQazo(type: QazoPrayerType) {
         viewModelScope.launch { qazoRepo.decrement(type) }
+    }
+
+    fun addQazoYears(years: Int) {
+        viewModelScope.launch { qazoRepo.addBulkForYears(years) }
     }
 
     fun togglePrayerCompleted(type: PrayerType) {

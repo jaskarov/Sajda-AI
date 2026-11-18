@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -93,6 +94,7 @@ fun HomeScreen(
     onCitySelected: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenWeeklyStats: () -> Unit = {},
+    onOpenWuduGuide: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -314,6 +316,72 @@ fun HomeScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // Direct Wudu / Ghusl / Tayammum shortcut for Beginners
+            item {
+                Card(
+                    onClick = onOpenWuduGuide,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_open_wudu_button")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.WaterDrop,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = lText(
+                                    "Tahorat, G‘usl va Tayammum tartibi",
+                                    "Таҳорат, Ғусл ва Таяммум тартиби"
+                                ).get(script),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = lText(
+                                    "Namozdan oldingi 8 qadam va 4 farzni ovozli o‘rganing",
+                                    "Намоздан олдинги 8 қадам ва 4 фарзни овозли ўрганинг"
+                                ).get(script),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = lText("Ochish", "Очиш").get(script),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

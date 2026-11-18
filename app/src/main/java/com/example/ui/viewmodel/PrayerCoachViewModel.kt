@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioCoachStatus
 import com.example.audio.PrayerAudioCoach
 import com.example.data.local.PrayerHistoryRepository
+import com.example.data.local.QazoPrayerRepository
 import com.example.data.local.SajdaDatabase
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserSettings
@@ -17,6 +18,7 @@ import com.example.domain.model.PoseAnalysisSnapshot
 import com.example.domain.model.PrayerPose
 import com.example.domain.model.PrayerStep
 import com.example.domain.model.PrayerTrack
+import com.example.domain.model.QazoPrayerType
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +48,9 @@ data class PrayerCoachUiState(
     val totalSessionSeconds: Int = 0,
     val pendingNextTrack: PrayerTrack? = null,
     val nextTrackCountdownSec: Int = 0,
-    val hapticFeedbackPulse: Int = 0
+    val hapticFeedbackPulse: Int = 0,
+    val qazoTypeId: String = "",
+    val qazoDecrementedOnCompletion: Boolean = false
 ) {
     val currentStep: PrayerStep? get() = steps.getOrNull(currentStepIndex)
 }
@@ -54,9 +58,12 @@ data class PrayerCoachUiState(
 class PrayerCoachViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefsRepo = UserPreferencesRepository(application)
-    private val historyRepo = SajdaDatabase.getInstance(application).let { db ->
-        PrayerHistoryRepository(db.prayerHistoryDao(), db.dailyPrayerProgressDao())
-    }
+    private val database = SajdaDatabase.getInstance(application)
+    private val historyRepo = PrayerHistoryRepository(
+        database.prayerHistoryDao(),
+        database.dailyPrayerProgressDao()
+    )
+    private val qazoRepo = QazoPrayerRepository(database.qazoPrayerDao())
     private val sequenceEngine = PrayerSequenceEngine()
     private val audioCoach = PrayerAudioCoach(application)
 
@@ -87,7 +94,11 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun prepareTrack(track: PrayerTrack, initialMode: CoachMode = CoachMode.CAMERA_AI) {
+    fun prepareTrack(
+        track: PrayerTrack,
+        initialMode: CoachMode = CoachMode.CAMERA_AI,
+        qazoTypeId: String = ""
+    ) {
         nextTrackCountdownJob?.cancel()
         val currentGender = _uiState.value.settings.gender
         val initialSteps = sequenceEngine.buildSteps(track, currentGender)
@@ -103,7 +114,9 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 isPostRecitationCueActive = false,
                 calibrationConfirmedOnce = false,
                 pendingNextTrack = null,
-                nextTrackCountdownSec = 0
+                nextTrackCountdownSec = 0,
+                qazoTypeId = qazoTypeId,
+                qazoDecrementedOnCompletion = false
             )
         }
         viewModelScope.launch {
@@ -137,7 +150,8 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     fun startActivePrayerSession(
         track: PrayerTrack,
         mode: CoachMode,
-        fallbackReason: FallbackReason = FallbackReason.NONE
+        fallbackReason: FallbackReason = FallbackReason.NONE,
+        qazoTypeId: String = ""
     ) {
         nextTrackCountdownJob?.cancel()
         val currentGender = _uiState.value.settings.gender
@@ -157,7 +171,9 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 stepAudioDone = false,
                 isPostRecitationCueActive = false,
                 pendingNextTrack = null,
-                nextTrackCountdownSec = 0
+                nextTrackCountdownSec = 0,
+                qazoTypeId = qazoTypeId,
+                qazoDecrementedOnCompletion = false
             )
         }
         enterStep(0)
@@ -434,14 +450,17 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         val durationSec = ((SystemClock.elapsedRealtime() - sessionStartMillis) / 1000L)
             .toInt()
             .coerceAtLeast(10)
-        val nextTrack = state.track.nextContinuationTrack()
+        val activeQazoType = QazoPrayerType.fromId(state.qazoTypeId)
+        val isQazoSession = activeQazoType != null
+        val nextTrack = if (isQazoSession) null else state.track.nextContinuationTrack()
 
         _uiState.update {
             it.copy(
                 isCompleted = true,
                 totalSessionSeconds = durationSec,
                 pendingNextTrack = nextTrack,
-                nextTrackCountdownSec = if (nextTrack != null) 5 else 0
+                nextTrackCountdownSec = if (nextTrack != null) 5 else 0,
+                qazoDecrementedOnCompletion = isQazoSession
             )
         }
 
@@ -454,6 +473,9 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 cityId = state.settings.selectedCityId,
                 durationSeconds = durationSec
             )
+            if (activeQazoType != null) {
+                qazoRepo.decrement(activeQazoType)
+            }
         }
 
         if (nextTrack != null) {

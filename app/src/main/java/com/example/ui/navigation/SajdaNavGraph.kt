@@ -18,13 +18,18 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -58,13 +63,14 @@ data class PermissionsRoute(val fromSettings: Boolean = false)
 data object MainTabsRoute
 
 @Serializable
-data class CalibrationRoute(val trackId: String)
+data class CalibrationRoute(val trackId: String, val qazoTypeId: String = "")
 
 @Serializable
 data class ActivePrayerRoute(
     val trackId: String,
     val modeName: String,
-    val fallbackReasonName: String
+    val fallbackReasonName: String,
+    val qazoTypeId: String = ""
 )
 
 @Serializable
@@ -84,17 +90,42 @@ fun SajdaNavGraph(
         OnboardingRoute
     }
 
+    val baseDensity = LocalDensity.current
+    val effectiveDensity = if (mainUiState.settings.largeTextMode) {
+        Density(
+            density = baseDensity.density,
+            fontScale = (baseDensity.fontScale * 1.18f).coerceAtMost(1.6f)
+        )
+    } else {
+        baseDensity
+    }
+
+    CompositionLocalProvider(LocalDensity provides effectiveDensity) {
     NavHost(
         navController = navController,
         startDestination = startDest
     ) {
         composable<OnboardingRoute> {
+            var pendingSeated by remember { mutableStateOf(mainUiState.settings.seatedPrayerMode) }
+            var pendingLargeText by remember { mutableStateOf(mainUiState.settings.largeTextMode) }
             OnboardingScreen(
                 initialGender = mainUiState.settings.gender,
                 initialScript = mainUiState.settings.script,
                 initialCityId = mainUiState.settings.selectedCityId,
+                initialSeatedMode = pendingSeated,
+                initialLargeTextMode = pendingLargeText,
+                onAccessibilitySelected = { seated, largeText ->
+                    pendingSeated = seated
+                    pendingLargeText = largeText
+                },
                 onComplete = { gender, script, cityId ->
-                    mainViewModel.completeOnboarding(gender, script, cityId)
+                    mainViewModel.completeOnboarding(
+                        gender = gender,
+                        script = script,
+                        cityId = cityId,
+                        seatedPrayerMode = pendingSeated,
+                        largeTextMode = pendingLargeText
+                    )
                     navController.navigate(PermissionsRoute(fromSettings = false)) {
                         popUpTo<OnboardingRoute> { inclusive = true }
                     }
@@ -121,6 +152,7 @@ fun SajdaNavGraph(
 
         composable<MainTabsRoute> {
             var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+            var learnInitialTab by rememberSaveable { mutableIntStateOf(0) }
             val script = mainUiState.settings.script
 
             Scaffold(
@@ -193,6 +225,10 @@ fun SajdaNavGraph(
                         onCitySelected = { mainViewModel.setCityId(it) },
                         onOpenSettings = { navController.navigate(SettingsRoute) },
                         onOpenWeeklyStats = { selectedTab = 2 },
+                        onOpenWuduGuide = {
+                            learnInitialTab = 1
+                            selectedTab = 1
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                     1 -> LearnScreen(
@@ -203,6 +239,8 @@ fun SajdaNavGraph(
                         onStartTrack = { track ->
                             navController.navigate(CalibrationRoute(track.id))
                         },
+                        initialTab = learnInitialTab,
+                        onTabChanged = { learnInitialTab = it },
                         modifier = Modifier.padding(innerPadding)
                     )
                     2 -> WeeklyProgressScreen(
@@ -211,6 +249,15 @@ fun SajdaNavGraph(
                         onTogglePrayerForDay = mainViewModel::togglePrayerCompletedForDay,
                         onIncrementQazo = mainViewModel::incrementQazo,
                         onDecrementQazo = mainViewModel::decrementQazo,
+                        onAddQazoYears = mainViewModel::addQazoYears,
+                        onPrayQazo = { qazoType ->
+                            navController.navigate(
+                                CalibrationRoute(
+                                    trackId = qazoType.toPrayerTrack().id,
+                                    qazoTypeId = qazoType.id
+                                )
+                            )
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                     else -> {
@@ -231,8 +278,11 @@ fun SajdaNavGraph(
             val coachViewModel: PrayerCoachViewModel = viewModel(backStackEntry)
             val coachState by coachViewModel.uiState.collectAsStateWithLifecycle()
 
-            LaunchedEffect(route.trackId) {
-                coachViewModel.prepareTrack(PrayerTrack.fromId(route.trackId))
+            LaunchedEffect(route.trackId, route.qazoTypeId) {
+                coachViewModel.prepareTrack(
+                    track = PrayerTrack.fromId(route.trackId),
+                    qazoTypeId = route.qazoTypeId
+                )
             }
 
             CalibrationScreen(
@@ -244,7 +294,8 @@ fun SajdaNavGraph(
                         ActivePrayerRoute(
                             trackId = route.trackId,
                             modeName = mode.name,
-                            fallbackReasonName = reason.name
+                            fallbackReasonName = reason.name,
+                            qazoTypeId = route.qazoTypeId
                         )
                     ) {
                         popUpTo<CalibrationRoute> { inclusive = true }
@@ -260,13 +311,18 @@ fun SajdaNavGraph(
             val coachViewModel: PrayerCoachViewModel = viewModel(backStackEntry)
             val coachState by coachViewModel.uiState.collectAsStateWithLifecycle()
 
-            LaunchedEffect(route.trackId, route.modeName) {
+            LaunchedEffect(route.trackId, route.modeName, route.qazoTypeId) {
                 val track = PrayerTrack.fromId(route.trackId)
                 val mode = runCatching { CoachMode.valueOf(route.modeName) }
                     .getOrDefault(CoachMode.CAMERA_AI)
                 val reason = runCatching { FallbackReason.valueOf(route.fallbackReasonName) }
                     .getOrDefault(FallbackReason.NONE)
-                coachViewModel.startActivePrayerSession(track, mode, reason)
+                coachViewModel.startActivePrayerSession(
+                    track = track,
+                    mode = mode,
+                    fallbackReason = reason,
+                    qazoTypeId = route.qazoTypeId
+                )
             }
 
             ActivePrayerScreen(
@@ -296,7 +352,12 @@ fun SajdaNavGraph(
                 onVoiceSpeedChange = mainViewModel::setVoiceSpeed,
                 onDarkThresholdChange = mainViewModel::setDarkRoomThreshold,
                 onSeatedModeToggle = mainViewModel::setSeatedPrayerMode,
+                onLargeTextModeToggle = mainViewModel::setLargeTextMode,
+                onLowPowerCameraToggle = mainViewModel::setLowPowerCameraMode,
                 onSyncCalendarNow = mainViewModel::syncPrayerCalendarNow,
+                onExportBackupUri = mainViewModel::exportBackupToUri,
+                onImportBackupUri = mainViewModel::importBackupFromUri,
+                onClearBackupMessage = mainViewModel::clearBackupMessage,
                 onOpenPermissions = {
                     navController.navigate(PermissionsRoute(fromSettings = true))
                 },
@@ -310,5 +371,6 @@ fun SajdaNavGraph(
                 onBack = { navController.popBackStack() }
             )
         }
+    }
     }
 }

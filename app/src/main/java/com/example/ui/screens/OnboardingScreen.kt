@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Man
 import androidx.compose.material.icons.filled.Translate
@@ -66,11 +67,15 @@ fun OnboardingScreen(
     initialGender: Gender,
     initialScript: TextScript,
     initialCityId: String,
+    initialSeatedMode: Boolean = false,
+    initialLargeTextMode: Boolean = false,
+    onAccessibilitySelected: (seatedMode: Boolean, largeTextMode: Boolean) -> Unit = { _, _ -> },
     onComplete: (Gender, TextScript, String) -> Unit
 ) {
     var selectedScript by remember { mutableStateOf(initialScript) }
     var selectedGender by remember { mutableStateOf(initialGender) }
     var selectedCityId by remember { mutableStateOf(initialCityId) }
+    var seniorModeSelected by remember { mutableStateOf(initialSeatedMode || initialLargeTextMode) }
 
     Box(
         modifier = Modifier
@@ -220,8 +225,48 @@ fun OnboardingScreen(
                 }
             }
 
+            // 4. Comfort & Accessibility Mode (Standard vs Senior/Seated)
+            SectionCard(
+                icon = Icons.Default.Accessible,
+                title = lText("Qanday qulaylik kerak?", "Қандай қулайлик керак?").get(selectedScript)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ChoiceTile(
+                        label = lText("Oddiy / Yoshlar", "Оддий / Ёшлар").get(selectedScript),
+                        subtitle = lText(
+                            "To‘liq harakatlar, standart shrift",
+                            "Тўлиқ ҳаракатлар, стандарт шрифт"
+                        ).get(selectedScript),
+                        selected = !seniorModeSelected,
+                        onClick = { seniorModeSelected = false },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("onboarding_mode_standard")
+                    )
+                    ChoiceTile(
+                        label = lText("Keksalar / Stulda", "Кексалар / Стулда").get(selectedScript),
+                        subtitle = lText(
+                            "Stulda imo-ishora + katta shrift",
+                            "Стулда имо-ишора + катта шрифт"
+                        ).get(selectedScript),
+                        icon = Icons.Default.Accessible,
+                        selected = seniorModeSelected,
+                        onClick = { seniorModeSelected = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("onboarding_mode_senior")
+                    )
+                }
+            }
+
             Button(
-                onClick = { onComplete(selectedGender, selectedScript, selectedCityId) },
+                onClick = {
+                    onAccessibilitySelected(seniorModeSelected, seniorModeSelected)
+                    onComplete(selectedGender, selectedScript, selectedCityId)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)

@@ -102,5 +102,14 @@ class PrayerHistoryRepository(
 
     suspend fun deleteEntry(id: Long) = historyDao.deleteById(id)
 
+    suspend fun getAllDailyProgress(): List<DailyPrayerProgressEntity> =
+        dailyProgressDao.getAllDays()
+
+    suspend fun restoreDailyProgress(items: List<DailyPrayerProgressEntity>) {
+        if (items.isNotEmpty()) {
+            dailyProgressDao.upsertAll(items)
+        }
+    }
+
     fun todayKey(): String = formatDayKey()
 }

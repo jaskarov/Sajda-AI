@@ -25,6 +25,8 @@ data class UserSettings(
     val voiceSpeed: Float = 1.0f,
     val darkRoomLuminanceThreshold: Float = 28f,
     val seatedPrayerMode: Boolean = false,
+    val largeTextMode: Boolean = false,
+    val lowPowerCameraMode: Boolean = false,
     val alarmMap: Map<PrayerType, Boolean> = PrayerType.entries.associateWith { it.isPrayable }
 )
 
@@ -39,6 +41,8 @@ class UserPreferencesRepository(private val context: Context) {
         val VOICE_SPEED = floatPreferencesKey("voice_speed")
         val DARK_THRESHOLD = floatPreferencesKey("dark_threshold")
         val SEATED_PRAYER_MODE = booleanPreferencesKey("seated_prayer_mode")
+        val LARGE_TEXT_MODE = booleanPreferencesKey("large_text_mode")
+        val LOW_POWER_CAMERA_MODE = booleanPreferencesKey("low_power_camera_mode")
         fun alarmKey(type: PrayerType) = booleanPreferencesKey("alarm_${type.id}")
     }
 
@@ -55,15 +59,25 @@ class UserPreferencesRepository(private val context: Context) {
             voiceSpeed = prefs[Keys.VOICE_SPEED] ?: 1.0f,
             darkRoomLuminanceThreshold = prefs[Keys.DARK_THRESHOLD] ?: 28f,
             seatedPrayerMode = prefs[Keys.SEATED_PRAYER_MODE] ?: false,
+            largeTextMode = prefs[Keys.LARGE_TEXT_MODE] ?: false,
+            lowPowerCameraMode = prefs[Keys.LOW_POWER_CAMERA_MODE] ?: false,
             alarmMap = alarms
         )
     }
 
-    suspend fun completeOnboarding(gender: Gender, script: TextScript, cityId: String) {
+    suspend fun completeOnboarding(
+        gender: Gender,
+        script: TextScript,
+        cityId: String,
+        seatedPrayerMode: Boolean = false,
+        largeTextMode: Boolean = false
+    ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.GENDER] = gender.id
             prefs[Keys.SCRIPT] = script.id
             prefs[Keys.CITY_ID] = cityId
+            prefs[Keys.SEATED_PRAYER_MODE] = seatedPrayerMode
+            prefs[Keys.LARGE_TEXT_MODE] = largeTextMode
             prefs[Keys.ONBOARDING_COMPLETED] = true
         }
     }
@@ -98,5 +112,31 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setSeatedPrayerMode(enabled: Boolean) {
         context.dataStore.edit { it[Keys.SEATED_PRAYER_MODE] = enabled }
+    }
+
+    suspend fun setLargeTextMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.LARGE_TEXT_MODE] = enabled }
+    }
+
+    suspend fun setLowPowerCameraMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.LOW_POWER_CAMERA_MODE] = enabled }
+    }
+
+    suspend fun restoreSettings(settings: UserSettings) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.ONBOARDING_COMPLETED] = true
+            prefs[Keys.GENDER] = settings.gender.id
+            prefs[Keys.SCRIPT] = settings.script.id
+            prefs[Keys.CITY_ID] = settings.selectedCityId
+            prefs[Keys.PREFER_OFFLINE_MP3] = settings.preferOfflineMp3
+            prefs[Keys.VOICE_SPEED] = settings.voiceSpeed.coerceIn(0.75f, 1.35f)
+            prefs[Keys.DARK_THRESHOLD] = settings.darkRoomLuminanceThreshold.coerceIn(12f, 55f)
+            prefs[Keys.SEATED_PRAYER_MODE] = settings.seatedPrayerMode
+            prefs[Keys.LARGE_TEXT_MODE] = settings.largeTextMode
+            prefs[Keys.LOW_POWER_CAMERA_MODE] = settings.lowPowerCameraMode
+            PrayerType.entries.forEach { type ->
+                prefs[Keys.alarmKey(type)] = settings.alarmMap[type] ?: type.isPrayable
+            }
+        }
     }
 }

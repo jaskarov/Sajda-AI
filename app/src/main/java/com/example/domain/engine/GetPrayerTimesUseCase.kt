@@ -138,6 +138,44 @@ class GetPrayerTimesUseCase {
         )
     }
 
+    fun computeCalendarDay(
+        city: UzbekCity,
+        year: Int,
+        month: Int,
+        day: Int,
+        source: String = "uz_taqvim_365_${year}_offline",
+        syncedAtMillis: Long = 0L
+    ): com.example.data.local.PrayerCalendarDayEntity {
+        val times = computeTimesHours(
+            year = year,
+            month = month,
+            day = day,
+            latitude = city.latitude,
+            longitude = city.longitude,
+            timeZoneHours = 5.0
+        )
+
+        fun fmt(totalMinutes: Int): String {
+            val clamped = totalMinutes.coerceIn(0, 23 * 60 + 59)
+            return String.format(Locale.US, "%02d:%02d", clamped / 60, clamped % 60)
+        }
+
+        return com.example.data.local.PrayerCalendarDayEntity(
+            cityId = city.id,
+            year = year,
+            month = month,
+            day = day,
+            bomdod = fmt(toMinutes(times[PrayerType.BOMDOD]!!) + city.fajrOffsetMin),
+            quyosh = fmt(toMinutes(times[PrayerType.QUYOSH]!!)),
+            peshin = fmt(toMinutes(times[PrayerType.PESHIN]!!)),
+            asr = fmt(toMinutes(times[PrayerType.ASR]!!)),
+            shom = fmt(toMinutes(times[PrayerType.SHOM]!!) + city.maghribOffsetMin),
+            xufton = fmt(toMinutes(times[PrayerType.XUFTON]!!)),
+            source = source,
+            syncedAtMillis = syncedAtMillis
+        )
+    }
+
     private fun computeTimesHours(
         year: Int,
         month: Int,

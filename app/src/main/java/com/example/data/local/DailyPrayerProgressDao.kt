@@ -30,8 +30,14 @@ interface DailyPrayerProgressDao {
         endDayKey: String
     ): Flow<List<DailyPrayerProgressEntity>>
 
+    @Query("SELECT * FROM daily_prayer_progress ORDER BY dayKey ASC")
+    suspend fun getAllDays(): List<DailyPrayerProgressEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(progress: DailyPrayerProgressEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(items: List<DailyPrayerProgressEntity>)
 
     @Query("DELETE FROM daily_prayer_progress WHERE dayKey = :dayKey")
     suspend fun deleteDay(dayKey: String)

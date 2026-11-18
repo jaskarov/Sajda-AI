@@ -47,7 +47,8 @@ fun CameraPosePreview(
     showSkeleton: Boolean = true,
     isMatched: Boolean = false,
     enabled: Boolean = true,
-    seatedMode: Boolean = false
+    seatedMode: Boolean = false,
+    lowPowerMode: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -57,10 +58,12 @@ fun CameraPosePreview(
             isFrontCamera = true,
             darkLuminanceThreshold = darkLuminanceThreshold,
             seatedMode = seatedMode,
+            lowPowerMode = lowPowerMode,
             onPoseResult = onPoseResult
         )
     }
     analyzer.seatedMode = seatedMode
+    analyzer.lowPowerMode = lowPowerMode
 
     val previewView = remember {
         PreviewView(context).apply {

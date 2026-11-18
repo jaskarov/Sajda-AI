@@ -7,6 +7,9 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 
 private val LightColorScheme = lightColorScheme(
@@ -61,14 +64,26 @@ val SajdaShapes = Shapes(
 @Composable
 fun SajdaAiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    largeTextMode: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val baseDensity = LocalDensity.current
+    val effectiveDensity = if (largeTextMode) {
+        Density(
+            density = baseDensity.density,
+            fontScale = (baseDensity.fontScale * 1.18f).coerceAtMost(1.6f)
+        )
+    } else {
+        baseDensity
+    }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        shapes = SajdaShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalDensity provides effectiveDensity) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = AppTypography,
+            shapes = SajdaShapes,
+            content = content
+        )
+    }
 }

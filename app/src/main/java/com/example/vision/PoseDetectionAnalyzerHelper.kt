@@ -65,6 +65,7 @@ class PoseDetectionAnalyzerHelper(
     private val onError: (Exception) -> Unit = { error ->
         Log.e(TAG, "ML Kit pose detection error", error)
     },
+    private val frameIntervalProvider: () -> Long = { minFrameIntervalMs },
     private val onLandmarksExtracted: (PoseFrameLandmarks) -> Unit
 ) : ImageAnalysis.Analyzer, Closeable {
 
@@ -83,7 +84,7 @@ class PoseDetectionAnalyzerHelper(
     @OptIn(ExperimentalGetImage::class)
     override fun analyze(imageProxy: ImageProxy) {
         val now = clockMs()
-        if (isBusy || (now - lastProcessedTimeMs) < minFrameIntervalMs) {
+        if (isBusy || (now - lastProcessedTimeMs) < frameIntervalProvider()) {
             finishImageProxy(imageProxy)
             return
         }

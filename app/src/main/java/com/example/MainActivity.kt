@@ -16,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.audio.configureAppCheck
 import com.example.ui.navigation.SajdaNavGraph
 import com.example.ui.theme.SajdaAiTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,9 +46,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Configure Firebase App Check with launch intent before rendering UI or ViewModels
-        configureAppCheck(this, intent)
 
         refreshPermissionState()
         requestStartupCameraAndLocationPermissionsIfNeeded()

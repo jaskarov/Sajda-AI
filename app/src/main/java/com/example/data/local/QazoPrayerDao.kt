@@ -31,4 +31,11 @@ interface QazoPrayerDao {
         val current = getQazo() ?: QazoPrayerEntity()
         upsert(current.withCount(type, count))
     }
+
+    @Transaction
+    suspend fun addBulkForYears(years: Int) {
+        if (years <= 0) return
+        val current = getQazo() ?: QazoPrayerEntity()
+        upsert(current.addBulkForYears(years))
+    }
 }
