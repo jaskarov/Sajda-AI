@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VolumeUp
@@ -64,6 +65,7 @@ fun SettingsScreen(
     onPreferOfflineMp3Toggle: (Boolean) -> Unit,
     onVoiceSpeedChange: (Float) -> Unit,
     onDarkThresholdChange: (Float) -> Unit,
+    onSeatedModeToggle: (Boolean) -> Unit = {},
     onSyncCalendarNow: () -> Unit = {},
     onOpenPermissions: () -> Unit = {},
     onTestAudio: () -> Unit = {},
@@ -156,6 +158,60 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                // Chair / Seated Mode (Accessibility for Elderly & Mobility-Impaired)
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(
+                        1.dp,
+                        if (settings.seatedPrayerMode) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Accessible,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = lText(
+                                        "Stulda / O‘tirib o‘qish (Imo-ishora)",
+                                        "Стулда / Ўтириб ўқиш (Имо-ишора)"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = lText(
+                                        "Keksalar va bel-tizzada og‘rig‘i borlar uchun: ruku' yengil (15°–30°), sajda chuqurroq (45°–60°) egilish orqali aniqlanadi.",
+                                        "Кексалар ва бел-тиззада оғриғи борлар учун: рукуъ енгил (15°–30°), сажда чуқурроқ (45°–60°) эгилиш орқали аниқланади."
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Switch(
+                            checked = settings.seatedPrayerMode,
+                            onCheckedChange = onSeatedModeToggle,
+                            modifier = Modifier.testTag("settings_seated_mode_switch")
+                        )
                     }
                 }
 

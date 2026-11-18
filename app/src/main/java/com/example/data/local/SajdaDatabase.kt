@@ -11,15 +11,17 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     entities = [
         PrayerHistoryEntity::class,
         DailyPrayerProgressEntity::class,
-        PrayerCalendarDayEntity::class
+        PrayerCalendarDayEntity::class,
+        QazoPrayerEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class SajdaDatabase : RoomDatabase() {
     abstract fun prayerHistoryDao(): PrayerHistoryDao
     abstract fun dailyPrayerProgressDao(): DailyPrayerProgressDao
     abstract fun prayerCalendarDao(): PrayerCalendarDao
+    abstract fun qazoPrayerDao(): QazoPrayerDao
 
     companion object {
         @Volatile
@@ -68,6 +70,26 @@ abstract class SajdaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `qazo_prayers` (
+                        `id` INTEGER NOT NULL,
+                        `bomdodCount` INTEGER NOT NULL DEFAULT 0,
+                        `peshinCount` INTEGER NOT NULL DEFAULT 0,
+                        `asrCount` INTEGER NOT NULL DEFAULT 0,
+                        `shomCount` INTEGER NOT NULL DEFAULT 0,
+                        `xuftonCount` INTEGER NOT NULL DEFAULT 0,
+                        `vitrCount` INTEGER NOT NULL DEFAULT 0,
+                        `updatedAtMillis` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getInstance(context: Context): SajdaDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -75,7 +97,7 @@ abstract class SajdaDatabase : RoomDatabase() {
                     SajdaDatabase::class.java,
                     "sajda_ai_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { INSTANCE = it }
             }

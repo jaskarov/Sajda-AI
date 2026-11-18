@@ -88,7 +88,10 @@ class QiblaCompassTest {
         composeRule.onNodeWithTag("qibla_compass_dial").assertIsDisplayed()
         composeRule.onNodeWithTag("compass_azimuth_value").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("qibla_kaaba_distance").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("qibla_sensor_status").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Datchik holati: A‘lo").assertIsDisplayed()
         composeRule.onNodeWithText("Tekis ✓").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Magnetometr", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -124,6 +127,8 @@ class QiblaCompassTest {
         composeRule.onNodeWithText(
             "Kompas aniqligi past — telefonni havoda 8 shaklida aylantiring."
         ).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Biroz tekislang").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("egilgan", substring = true).assertDoesNotExist()
     }
 
     @Test

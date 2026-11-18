@@ -16,6 +16,8 @@ import com.example.data.local.PrayerCalendarDayEntity
 import com.example.data.local.PrayerCalendarRepository
 import com.example.data.local.PrayerHistoryEntity
 import com.example.data.local.PrayerHistoryRepository
+import com.example.data.local.QazoPrayerEntity
+import com.example.data.local.QazoPrayerRepository
 import com.example.data.local.SajdaDatabase
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserSettings
@@ -23,7 +25,9 @@ import com.example.domain.engine.GetPrayerTimesUseCase
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.Gender
 import com.example.domain.model.PrayerScheduleSummary
+import com.example.domain.model.PrayerTrack
 import com.example.domain.model.PrayerType
+import com.example.domain.model.QazoPrayerType
 import com.example.domain.model.TextScript
 import com.example.domain.model.WeeklyPrayerAnalytics
 import com.example.domain.model.WeeklyPrayerSummary
@@ -54,9 +58,11 @@ data class CompassUiState(
 data class MainUiState(
     val settings: UserSettings = UserSettings(),
     val schedule: PrayerScheduleSummary? = null,
+    val quickTracks: List<PrayerTrack> = emptyList(),
     val todayProgress: DailyPrayerProgressEntity? = null,
     val dailyProgressHistory: List<DailyPrayerProgressEntity> = emptyList(),
     val weeklySummary: WeeklyPrayerSummary? = null,
+    val qazoProgress: QazoPrayerEntity = QazoPrayerEntity(),
     val history: List<PrayerHistoryEntity> = emptyList(),
     val compassAzimuth: Float = 0f,
     val compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
@@ -81,6 +87,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         application,
         database.prayerCalendarDao()
     )
+    private val qazoRepo = QazoPrayerRepository(database.qazoPrayerDao())
     private val getPrayerTimesUseCase = GetPrayerTimesUseCase()
     private val workScheduler = PrayerWorkScheduler(application)
     private val compassSensor = QiblaCompassSensor(application)
@@ -122,18 +129,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .map { PrayerHistoryRepository.formatDayKey(java.util.Date(it)) }
         .distinctUntilChanged()
 
-    private val databaseFlows = combine(
+    private val progressAndStatsFlow = combine(
         historyRepo.observeTodayProgress(currentDayKeyFlow),
         historyRepo.recentDailyProgress,
         historyRepo.recentHistory,
         weeklySummaryFlow,
-        calendarPairFlow
-    ) { todayProgress, dailyHistory, sessionHistory, weeklySummary, calendarBundle ->
-        DatabaseBundle(
+        qazoRepo.qazoFlow
+    ) { todayProgress, dailyHistory, sessionHistory, weeklySummary, qazoProgress ->
+        StatsBundle(
             todayProgress = todayProgress,
             dailyProgressHistory = dailyHistory,
             sessionHistory = sessionHistory,
             weeklySummary = weeklySummary,
+            qazoProgress = qazoProgress
+        )
+    }
+
+    private val databaseFlows = combine(
+        progressAndStatsFlow,
+        calendarPairFlow
+    ) { stats, calendarBundle ->
+        DatabaseBundle(
+            todayProgress = stats.todayProgress,
+            dailyProgressHistory = stats.dailyProgressHistory,
+            sessionHistory = stats.sessionHistory,
+            weeklySummary = stats.weeklySummary,
+            qazoProgress = stats.qazoProgress,
             calendarBundle = calendarBundle
         )
     }
@@ -156,9 +177,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         MainUiState(
             settings = settings,
             schedule = schedule,
+            quickTracks = PrayerTrack.tracksForPrayer(schedule.currentPrayer),
             todayProgress = dbBundle.todayProgress,
             dailyProgressHistory = dbBundle.dailyProgressHistory,
             weeklySummary = dbBundle.weeklySummary,
+            qazoProgress = dbBundle.qazoProgress,
             history = dbBundle.sessionHistory,
             compassAzimuth = 0f,
             compassAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
@@ -281,6 +304,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefsRepo.setDarkRoomThreshold(threshold) }
     }
 
+    fun setSeatedPrayerMode(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setSeatedPrayerMode(enabled) }
+    }
+
+    fun incrementQazo(type: QazoPrayerType) {
+        viewModelScope.launch { qazoRepo.increment(type) }
+    }
+
+    fun decrementQazo(type: QazoPrayerType) {
+        viewModelScope.launch { qazoRepo.decrement(type) }
+    }
+
     fun togglePrayerCompleted(type: PrayerType) {
         if (!type.isPrayable) return
         viewModelScope.launch {
@@ -371,11 +406,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val isSyncing: Boolean
     )
 
+    private data class StatsBundle(
+        val todayProgress: DailyPrayerProgressEntity,
+        val dailyProgressHistory: List<DailyPrayerProgressEntity>,
+        val sessionHistory: List<PrayerHistoryEntity>,
+        val weeklySummary: WeeklyPrayerSummary,
+        val qazoProgress: QazoPrayerEntity
+    )
+
     private data class DatabaseBundle(
         val todayProgress: DailyPrayerProgressEntity,
         val dailyProgressHistory: List<DailyPrayerProgressEntity>,
         val sessionHistory: List<PrayerHistoryEntity>,
         val weeklySummary: WeeklyPrayerSummary,
+        val qazoProgress: QazoPrayerEntity,
         val calendarBundle: CalendarBundle
     )
 }

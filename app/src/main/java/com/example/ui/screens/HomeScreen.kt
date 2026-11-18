@@ -106,8 +106,11 @@ fun HomeScreen(
 
     if (schedule == null) return
 
-    val defaultTrack = remember(schedule.currentPrayer) {
-        PrayerTrack.defaultForPrayer(schedule.currentPrayer)
+    val quickTracks = remember(schedule.currentPrayer, uiState.quickTracks) {
+        uiState.quickTracks.ifEmpty { PrayerTrack.tracksForPrayer(schedule.currentPrayer) }
+    }
+    val defaultTrack = remember(schedule.currentPrayer, quickTracks) {
+        quickTracks.firstOrNull() ?: PrayerTrack.defaultForPrayer(schedule.currentPrayer)
     }
     var selectedTrack by remember(defaultTrack) { mutableStateOf(defaultTrack) }
 
@@ -281,14 +284,15 @@ fun HomeScreen(
                             )
                         }
 
-                        // Selectable Rakat / Track Chips
+                        // Dynamic Quick Rakat / Track Chips for the current prayer time
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
+                                .horizontalScroll(rememberScrollState())
+                                .testTag("home_quick_tracks_row"),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            PrayerTrack.entries.forEach { track ->
+                            quickTracks.forEach { track ->
                                 val isSelected = track == selectedTrack
                                 FilterChip(
                                     selected = isSelected,

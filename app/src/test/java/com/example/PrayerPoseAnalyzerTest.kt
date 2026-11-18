@@ -171,4 +171,72 @@ class PrayerPoseAnalyzerTest {
         )
         assertEquals(PrayerPose.SALAM, analyzer.evaluateFrame(salamLeft).rawPose)
     }
+
+    @Test
+    fun seatedMode_detectsQiyomRuku15To30_Sajda45To60_andSalamOnChair() {
+        val analyzer = PrayerPoseAnalyzer(seatedMode = true, onPoseResult = {})
+
+        fun seatedFrame(
+            timestampMs: Long,
+            leanDegrees: Float,
+            noseOffsetX: Float = 0f
+        ): PoseFrameLandmarks {
+            val rad = Math.toRadians(leanDegrees.toDouble())
+            val torsoLenPx = 180.0
+            val headLenPx = 250.0
+            val hipX = 240f
+            val hipY = 420f
+            val shoulderX = hipX + (torsoLenPx * kotlin.math.sin(rad)).toFloat()
+            val shoulderY = hipY - (torsoLenPx * kotlin.math.cos(rad)).toFloat()
+            val headCenterX = hipX + (headLenPx * kotlin.math.sin(rad)).toFloat()
+            val noseX = headCenterX + noseOffsetX
+            val noseY = hipY - (headLenPx * kotlin.math.cos(rad)).toFloat()
+
+            return PoseFrameLandmarks(
+                landmarks = listOf(
+                    ExtractedPoseLandmark(PoseLandmark.NOSE, noseX, noseY, 0f, noseX / 480f, noseY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.LEFT_EAR, headCenterX - 18f, noseY, 0f, (headCenterX - 18f) / 480f, noseY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.RIGHT_EAR, headCenterX + 18f, noseY, 0f, (headCenterX + 18f) / 480f, noseY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.LEFT_SHOULDER, shoulderX, shoulderY, 0f, shoulderX / 480f, shoulderY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.RIGHT_SHOULDER, shoulderX + 20f, shoulderY, 0f, (shoulderX + 20f) / 480f, shoulderY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.LEFT_HIP, hipX, hipY, 0f, hipX / 480f, hipY / 640f, 0.95f),
+                    ExtractedPoseLandmark(PoseLandmark.RIGHT_HIP, hipX + 16f, hipY, 0f, (hipX + 16f) / 480f, hipY / 640f, 0.95f)
+                    // Notice: ankles/knees omitted (e.g. cropped below table), yet seated calibration succeeds!
+                ),
+                frameWidth = 480,
+                frameHeight = 640,
+                rotationDegrees = 0,
+                timestampMs = timestampMs
+            )
+        }
+
+        // 1. Upright sitting on chair -> full body calibrated & QIYOM confirmed
+        val upright1 = analyzer.evaluateFrame(seatedFrame(timestampMs = 0L, leanDegrees = 2f))
+        assertTrue(upright1.isFullBodyVisible)
+        assertEquals(PrayerPose.QIYOM, upright1.rawPose)
+        val uprightConfirmed = analyzer.evaluateFrame(seatedFrame(timestampMs = 450L, leanDegrees = 2f))
+        assertEquals(PrayerPose.QIYOM, uprightConfirmed.confirmedPose)
+
+        // 2. Slight forward bow (22°, inside 15°-30°) -> RUKU
+        val rukuRaw = analyzer.evaluateFrame(seatedFrame(timestampMs = 900L, leanDegrees = 22f))
+        assertEquals(PrayerPose.RUKU, rukuRaw.rawPose)
+        val rukuConfirmed = analyzer.evaluateFrame(seatedFrame(timestampMs = 1350L, leanDegrees = 22f))
+        assertEquals(PrayerPose.RUKU, rukuConfirmed.confirmedPose)
+
+        // 3. Return upright -> QIYOM (accepted as Qavma)
+        val qavmaConfirmed = analyzer.evaluateFrame(seatedFrame(timestampMs = 1800L, leanDegrees = 3f))
+        assertEquals(PrayerPose.QIYOM, qavmaConfirmed.rawPose)
+
+        // 4. Deeper forward bow (52°, inside 45°-60°) -> SAJDA
+        val sajdaRaw = analyzer.evaluateFrame(seatedFrame(timestampMs = 2200L, leanDegrees = 52f))
+        assertEquals(PrayerPose.SAJDA, sajdaRaw.rawPose)
+        val sajdaConfirmed = analyzer.evaluateFrame(seatedFrame(timestampMs = 2650L, leanDegrees = 52f))
+        assertEquals(PrayerPose.SAJDA, sajdaConfirmed.confirmedPose)
+
+        // 5. Turn head right while sitting upright -> SALAM
+        val salamRaw = analyzer.evaluateFrame(seatedFrame(timestampMs = 3100L, leanDegrees = 2f, noseOffsetX = 14f))
+        assertEquals(PrayerPose.SALAM, salamRaw.rawPose)
+        val salamConfirmed = analyzer.evaluateFrame(seatedFrame(timestampMs = 3550L, leanDegrees = 2f, noseOffsetX = 14f))
+        assertEquals(PrayerPose.SALAM, salamConfirmed.confirmedPose)
+    }
 }

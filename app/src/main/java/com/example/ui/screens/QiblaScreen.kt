@@ -641,20 +641,20 @@ fun QiblaScreen(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
 
-                    val accuracyLabel = when (compassState.compassAccuracy) {
+                    val sensorQualityLabel = when (compassState.compassAccuracy) {
                         SensorManager.SENSOR_STATUS_ACCURACY_HIGH ->
-                            lText("Yuqori", "Юқори").get(script)
+                            lText("Datchik holati: A‘lo", "Датчик ҳолати: Аъло").get(script)
                         SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM ->
-                            lText("O‘rta", "Ўрта").get(script)
-                        else -> lText("Past", "Паст").get(script)
+                            lText("Datchik holati: Yaxshi", "Датчик ҳолати: Яхши").get(script)
+                        else -> lText(
+                            "Datchik holati: Sozlash kerak",
+                            "Датчик ҳолати: Созлаш керак"
+                        ).get(script)
                     }
                     val levelLabel = if (compassState.isLevel) {
                         lText("Tekis ✓", "Текис ✓").get(script)
                     } else {
-                        lText(
-                            "${compassState.tiltDegrees.roundToInt()}° egilgan",
-                            "${compassState.tiltDegrees.roundToInt()}° эгилган"
-                        ).get(script)
+                        lText("Biroz tekislang", "Бироз текисланг").get(script)
                     }
 
                     Row(
@@ -663,16 +663,19 @@ fun QiblaScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = lText(
-                                "Magnetometr + Akselerometr • $accuracyLabel",
-                                "Магнитометр + Акселерометр • $accuracyLabel"
-                            ).get(script),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = sensorQualityLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = if (compassState.compassAccuracy >= SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM) {
+                                PoseMatchedGreen
+                            } else {
+                                PoseWarningAmber
+                            },
+                            modifier = Modifier.testTag("qibla_sensor_status")
                         )
                         Text(
                             text = levelLabel,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = if (compassState.isLevel) PoseMatchedGreen else PoseWarningAmber
                         )

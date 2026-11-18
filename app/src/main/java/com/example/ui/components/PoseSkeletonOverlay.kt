@@ -46,7 +46,8 @@ fun CameraPosePreview(
     poseSnapshot: PoseAnalysisSnapshot = PoseAnalysisSnapshot(),
     showSkeleton: Boolean = true,
     isMatched: Boolean = false,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    seatedMode: Boolean = false
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -55,9 +56,11 @@ fun CameraPosePreview(
         PrayerPoseAnalyzer(
             isFrontCamera = true,
             darkLuminanceThreshold = darkLuminanceThreshold,
+            seatedMode = seatedMode,
             onPoseResult = onPoseResult
         )
     }
+    analyzer.seatedMode = seatedMode
 
     val previewView = remember {
         PreviewView(context).apply {

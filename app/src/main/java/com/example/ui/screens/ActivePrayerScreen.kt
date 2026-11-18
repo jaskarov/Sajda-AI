@@ -174,7 +174,27 @@ fun ActivePrayerScreen(
         ) == PackageManager.PERMISSION_GRANTED
 
     val detectedPose = uiState.poseSnapshot.confirmedPose
-    val isPoseAligned = detectedPose == step.expectedPose
+    val isSeatedMode = uiState.settings.seatedPrayerMode
+    val isPoseAligned = if (isSeatedMode) {
+        when (step.expectedPose) {
+            com.example.domain.model.PrayerPose.QIYOM,
+            com.example.domain.model.PrayerPose.QAVMA,
+            com.example.domain.model.PrayerPose.JALSA,
+            com.example.domain.model.PrayerPose.QADA -> detectedPose == com.example.domain.model.PrayerPose.QIYOM ||
+                detectedPose == com.example.domain.model.PrayerPose.QAVMA ||
+                detectedPose == com.example.domain.model.PrayerPose.JALSA ||
+                detectedPose == com.example.domain.model.PrayerPose.QADA
+            else -> detectedPose == step.expectedPose
+        }
+    } else {
+        when (step.expectedPose) {
+            com.example.domain.model.PrayerPose.QAVMA ->
+                detectedPose == com.example.domain.model.PrayerPose.QIYOM || detectedPose == com.example.domain.model.PrayerPose.QAVMA
+            com.example.domain.model.PrayerPose.JALSA ->
+                detectedPose == com.example.domain.model.PrayerPose.QADA || detectedPose == com.example.domain.model.PrayerPose.JALSA
+            else -> detectedPose == step.expectedPose
+        }
+    }
     val hasLiveSkeleton = uiState.poseSnapshot.landmarks.isNotEmpty()
 
     Box(
@@ -333,9 +353,14 @@ fun ActivePrayerScreen(
                     .weight(1f)
             ) {
                 val isCompactHeight = maxHeight < 360.dp
+                val isVeryShort = maxHeight < 260.dp
                 val isNarrowWidth = maxWidth < 340.dp
                 val panelWidth: Dp = if (isNarrowWidth) 120.dp else 138.dp
-                val previewHeight: Dp = if (isCompactHeight) 156.dp else 196.dp
+                val previewHeight: Dp = when {
+                    isVeryShort -> 92.dp
+                    isCompactHeight -> 156.dp
+                    else -> 196.dp
+                }
 
                 val arabicFontSize = if (isCompactHeight) 19.sp else 23.sp
                 val arabicLineHeight = if (isCompactHeight) 29.sp else 34.sp
@@ -350,7 +375,8 @@ fun ActivePrayerScreen(
                     Column(
                         modifier = Modifier
                             .width(panelWidth)
-                            .fillMaxHeight(),
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -367,6 +393,7 @@ fun ActivePrayerScreen(
                                     poseSnapshot = uiState.poseSnapshot,
                                     showSkeleton = true,
                                     isMatched = isPoseAligned,
+                                    seatedMode = isSeatedMode,
                                     modifier = Modifier.fillMaxSize()
                                 )
 
@@ -392,11 +419,19 @@ fun ActivePrayerScreen(
                                 }
                             }
 
-                            // Live angle telemetry chip
+                            // Clean friendly pose status chip (no confusing technical angles)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = ObsidianSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth()
+                                color = if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.18f)
+                                else ObsidianSurfaceVariant,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.6f)
+                                    else Color.White.copy(alpha = 0.12f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("active_pose_status_chip")
                             ) {
                                 Column(
                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
@@ -410,10 +445,15 @@ fun ActivePrayerScreen(
                                         maxLines = 1
                                     )
                                     Text(
-                                        text = "θt: ${uiState.poseSnapshot.torsoAngle.roundToInt()}° • θk: ${uiState.poseSnapshot.kneeAngle.roundToInt()}°",
-                                        fontFamily = JetBrainsMonoFontFamily,
+                                        text = if (isPoseAligned) {
+                                            lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
+                                        } else if (isSeatedMode) {
+                                            lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
+                                        } else {
+                                            lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
+                                        },
                                         fontSize = 10.sp,
-                                        color = Color.White.copy(alpha = 0.85f),
+                                        color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
                                         maxLines = 1
                                     )
                                 }

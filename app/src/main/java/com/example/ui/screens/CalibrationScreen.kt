@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.NightsStay
@@ -43,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -87,6 +89,7 @@ fun CalibrationScreen(
     onPoseResult: (com.example.domain.model.PoseAnalysisSnapshot) -> Unit,
     onSpeakCalibrationPrompt: (String) -> Unit,
     onStartActiveSession: (CoachMode, FallbackReason) -> Unit,
+    onSeatedModeToggle: (Boolean) -> Unit = {},
     onExit: () -> Unit
 ) {
     BackHandler(onBack = onExit)
@@ -193,6 +196,7 @@ fun CalibrationScreen(
                 showSkeleton = true,
                 isMatched = isReady,
                 enabled = !releasingForTransition,
+                seatedMode = uiState.settings.seatedPrayerMode,
                 modifier = Modifier.fillMaxSize()
             )
         } else {
@@ -375,6 +379,56 @@ fun CalibrationScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
+                }
+            }
+
+            // Seated / Chair Prayer Accessibility Toggle right before starting prayer
+            val isSeatedMode = uiState.settings.seatedPrayerMode
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (isSeatedMode) PoseMatchedGreen.copy(alpha = 0.24f)
+                else Color.Black.copy(alpha = 0.72f),
+                border = BorderStroke(
+                    1.dp,
+                    if (isSeatedMode) PoseMatchedGreen else Color.White.copy(alpha = 0.24f)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("calibration_seated_mode_card")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Accessible,
+                            contentDescription = null,
+                            tint = if (isSeatedMode) PoseMatchedGreen else SaffronGold,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = lText(
+                                "Stulda / O‘tirib o‘qish (Imo-ishora)",
+                                "Стулда / Ўтириб ўқиш (Имо-ишора)"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White
+                        )
+                    }
+                    Switch(
+                        checked = isSeatedMode,
+                        onCheckedChange = onSeatedModeToggle,
+                        modifier = Modifier.testTag("calibration_seated_mode_toggle")
+                    )
                 }
             }
         }

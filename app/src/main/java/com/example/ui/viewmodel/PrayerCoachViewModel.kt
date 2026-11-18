@@ -127,6 +127,13 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    fun setSeatedPrayerMode(enabled: Boolean) {
+        _uiState.update { it.copy(settings = it.settings.copy(seatedPrayerMode = enabled)) }
+        viewModelScope.launch {
+            prefsRepo.setSeatedPrayerMode(enabled)
+        }
+    }
+
     fun startActivePrayerSession(
         track: PrayerTrack,
         mode: CoachMode,
@@ -209,7 +216,11 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         if (state.mode == CoachMode.CAMERA_AI) {
             val step = state.currentStep ?: return
             val elapsedInStep = SystemClock.elapsedRealtime() - stepEnteredMillis
-            val poseMatches = isPoseCompatible(snapshot.confirmedPose, step.expectedPose)
+            val poseMatches = isPoseCompatible(
+                detected = snapshot.confirmedPose,
+                expected = step.expectedPose,
+                seatedMode = state.settings.seatedPrayerMode
+            )
             if (state.stepAudioDone && poseMatches && elapsedInStep >= 1200L) {
                 if (lastAutoAdvanceStepIndex != state.currentStepIndex) {
                     lastAutoAdvanceStepIndex = state.currentStepIndex
@@ -350,7 +361,11 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             CoachMode.CAMERA_AI -> {
                 val step = updated.currentStep ?: return
                 val elapsedInStep = SystemClock.elapsedRealtime() - stepEnteredMillis
-                val poseMatches = isPoseCompatible(updated.poseSnapshot.confirmedPose, step.expectedPose)
+                val poseMatches = isPoseCompatible(
+                    detected = updated.poseSnapshot.confirmedPose,
+                    expected = step.expectedPose,
+                    seatedMode = updated.settings.seatedPrayerMode
+                )
                 if (poseMatches && elapsedInStep >= 1200L &&
                     lastAutoAdvanceStepIndex != updated.currentStepIndex
                 ) {
@@ -386,7 +401,23 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    private fun isPoseCompatible(detected: PrayerPose, expected: PrayerPose): Boolean {
+    private fun isPoseCompatible(
+        detected: PrayerPose,
+        expected: PrayerPose,
+        seatedMode: Boolean = false
+    ): Boolean {
+        if (seatedMode) {
+            return when (expected) {
+                PrayerPose.QIYOM,
+                PrayerPose.QAVMA,
+                PrayerPose.JALSA,
+                PrayerPose.QADA -> detected == PrayerPose.QIYOM ||
+                    detected == PrayerPose.QAVMA ||
+                    detected == PrayerPose.JALSA ||
+                    detected == PrayerPose.QADA
+                else -> detected == expected
+            }
+        }
         return when (expected) {
             PrayerPose.QAVMA -> detected == PrayerPose.QIYOM || detected == PrayerPose.QAVMA
             PrayerPose.JALSA -> detected == PrayerPose.QADA || detected == PrayerPose.JALSA

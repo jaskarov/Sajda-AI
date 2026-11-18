@@ -63,6 +63,13 @@ enum class PrayerTrack(
         lText("Peshin (4 rakat farz)", "Пешин (4 ракат фарз)"),
         lText("4 rakat farz • Kunduzgi farz", "4 ракат фарз • Кундузги фарз")
     ),
+    PESHIN_SUNNAT_2(
+        "peshin_sunnat_2",
+        PrayerType.PESHIN,
+        2,
+        lText("Peshin (2 rakat sunnat)", "Пешин (2 ракат суннат)"),
+        lText("2 rakat oxirgi sunnat", "2 ракат охирги суннат")
+    ),
     ASR_FARZ(
         "asr_farz",
         PrayerType.ASR,
@@ -77,6 +84,13 @@ enum class PrayerTrack(
         lText("Shom (3 rakat farz)", "Шом (3 ракат фарз)"),
         lText("3 rakat farz • Quyosh botgach", "3 ракат фарз • Қуёш ботгач")
     ),
+    SHOM_SUNNAT(
+        "shom_sunnat",
+        PrayerType.SHOM,
+        2,
+        lText("Shom (2 rakat sunnat)", "Шом (2 ракат суннат)"),
+        lText("2 rakat sunnat • Shomdan keyin", "2 ракат суннат • Шомдан кейин")
+    ),
     XUFTON_FARZ(
         "xufton_farz",
         PrayerType.XUFTON,
@@ -84,11 +98,18 @@ enum class PrayerTrack(
         lText("Xufton (4 rakat farz)", "Хуфтон (4 ракат фарз)"),
         lText("4 rakat farz • Kechki farz", "4 ракат фарз • Кечки фарз")
     ),
+    XUFTON_SUNNAT(
+        "xufton_sunnat",
+        PrayerType.XUFTON,
+        2,
+        lText("Xufton (2 rakat sunnat)", "Хуфтон (2 ракат суннат)"),
+        lText("2 rakat sunnat • Xuftondan keyin", "2 ракат суннат • Хуфтондан кейин")
+    ),
     VITR_VOJIB(
         "vitr_vojib",
         PrayerType.XUFTON,
         3,
-        lText("Vitr (3 rakat vojib)", "Витр (3 ракат вожиб)"),
+        lText("Vitr (3 rakat)", "Витр (3 ракат)"),
         lText("3 rakat vojib • Qunut duosi bilan", "3 ракат вожиб • Қунут дуоси билан")
     );
 
@@ -110,7 +131,28 @@ enum class PrayerTrack(
             PrayerType.SHOM -> SHOM_FARZ
             PrayerType.XUFTON -> XUFTON_FARZ
         }
+
+        fun tracksForPrayer(prayerType: PrayerType): List<PrayerTrack> = when (prayerType) {
+            PrayerType.BOMDOD -> listOf(BOMDOD_SUNNAT, BOMDOD_FARZ)
+            PrayerType.QUYOSH, PrayerType.PESHIN -> listOf(PESHIN_SUNNAT_1, PESHIN_FARZ, PESHIN_SUNNAT_2)
+            PrayerType.ASR -> listOf(ASR_FARZ)
+            PrayerType.SHOM -> listOf(SHOM_FARZ, SHOM_SUNNAT)
+            PrayerType.XUFTON -> listOf(XUFTON_FARZ, XUFTON_SUNNAT, VITR_VOJIB)
+        }
     }
+}
+
+enum class QazoPrayerType(
+    val id: String,
+    val title: LText,
+    val rakatSummary: LText
+) {
+    BOMDOD("bomdod", lText("Bomdod", "Бомдод"), lText("2 rakat farz", "2 ракат фарз")),
+    PESHIN("peshin", lText("Peshin", "Пешин"), lText("4 rakat farz", "4 ракат фарз")),
+    ASR("asr", lText("Asr", "Аср"), lText("4 rakat farz", "4 ракат фарз")),
+    SHOM("shom", lText("Shom", "Шом"), lText("3 rakat farz", "3 ракат фарз")),
+    XUFTON("xufton", lText("Xufton", "Хуфтон"), lText("4 rakat farz", "4 ракат фарз")),
+    VITR("vitr", lText("Vitr", "Витр"), lText("3 rakat vojib", "3 ракат вожиб"))
 }
 
 enum class PrayerPose(

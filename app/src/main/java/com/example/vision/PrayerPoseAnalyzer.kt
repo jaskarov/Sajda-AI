@@ -9,6 +9,8 @@ import com.google.mlkit.vision.pose.PoseLandmark
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.acos
+import kotlin.math.atan2
+import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
@@ -27,6 +29,7 @@ import kotlin.math.sqrt
 class PrayerPoseAnalyzer(
     @Volatile var isFrontCamera: Boolean = true,
     private val darkLuminanceThreshold: Float = 28f,
+    @Volatile var seatedMode: Boolean = false,
     private val onPoseResult: (PoseAnalysisSnapshot) -> Unit
 ) : ImageAnalysis.Analyzer {
 
@@ -42,6 +45,10 @@ class PrayerPoseAnalyzer(
         const val FRONTAL_SAJDA_NOSE_Y_MIN = 0.75f
         const val FRONTAL_SAJDA_SHOULDER_Y_MIN = 0.70f
         const val SALAM_YAW_ASYMMETRY_THRESHOLD = 0.42f
+
+        const val SEATED_RUKU_MIN_LEAN_DEG = 14f
+        const val SEATED_RUKU_MAX_LEAN_DEG = 36f
+        const val SEATED_SAJDA_MIN_LEAN_DEG = 41f
 
         /**
          * Calculates the 3D angle (0..180 degrees) at [midPoint] between vectors
@@ -107,6 +114,39 @@ class PrayerPoseAnalyzer(
             return false
         }
 
+        /**
+         * Calculates forward lean angle (0..90+ degrees from upright vertical) for Seated/Chair mode
+         * using 3D shoulder-hip and nose-hip vectors.
+         */
+        fun calculateForwardLeanDegrees(
+            nose: ExtractedPoseLandmark?,
+            shoulder: ExtractedPoseLandmark?,
+            hip: ExtractedPoseLandmark?
+        ): Float {
+            val reliableHip = hip?.takeIf { isReliableStatic(it) } ?: return 0f
+            val reliableShoulder = shoulder?.takeIf { isReliableStatic(it) }
+            val reliableNose = nose?.takeIf { isReliableStatic(it) }
+
+            var maxLean = 0f
+            if (reliableShoulder != null) {
+                val dx = (reliableShoulder.x - reliableHip.x).toDouble()
+                val dz = (reliableShoulder.z - reliableHip.z).toDouble()
+                val dy = (reliableHip.y - reliableShoulder.y).toDouble().coerceAtLeast(1.0)
+                val horiz = sqrt(dx * dx + dz * dz)
+                val shoulderLean = Math.toDegrees(atan2(horiz, dy)).toFloat()
+                maxLean = max(maxLean, shoulderLean)
+            }
+            if (reliableNose != null) {
+                val dx = (reliableNose.x - reliableHip.x).toDouble()
+                val dz = (reliableNose.z - reliableHip.z).toDouble()
+                val dy = (reliableHip.y - reliableNose.y).toDouble().coerceAtLeast(1.0)
+                val horiz = sqrt(dx * dx + dz * dz)
+                val noseLean = Math.toDegrees(atan2(horiz, dy)).toFloat()
+                maxLean = max(maxLean, noseLean)
+            }
+            return maxLean
+        }
+
         private fun isReliableStatic(lm: ExtractedPoseLandmark?): Boolean =
             lm != null && lm.inFrameLikelihood >= MIN_CONFIDENCE
     }
@@ -126,6 +166,7 @@ class PrayerPoseAnalyzer(
     private var baselineTorsoSpanNorm: Float? = null
     private var baselineNoseAboveAnkleNorm: Float? = null
     private var baselineShoulderAboveAnkleNorm: Float? = null
+    private var baselineSeatedUpperSpanNorm: Float? = null
 
     private val poseHelper = PoseDetectionAnalyzerHelper(
         minFrameIntervalMs = MIN_FRAME_INTERVAL_MS,
@@ -189,7 +230,12 @@ class PrayerPoseAnalyzer(
         val hasLegs = knee != null && knee.inFrameLikelihood >= MIN_CONFIDENCE &&
             ankle != null && ankle.inFrameLikelihood >= MIN_CONFIDENCE
 
-        val isFullBodyVisible = hasHead && hasTorso && hasLegs
+        val isSeated = seatedMode
+        val isFullBodyVisible = if (isSeated) {
+            hasHead && hasTorso
+        } else {
+            hasHead && hasTorso && hasLegs
+        }
 
         val calibrationHint = when {
             isRoomTooDark -> lText(
@@ -197,20 +243,26 @@ class PrayerPoseAnalyzer(
                 "Хона қоронғи! Ёруғликни ёқинг ёки Фақат Аудио режимига ўтинг"
             )
             !hasHead -> lText(
-                "Boshingiz kadrga to‘liq tushishi uchun telefon burchagini sozlang",
-                "Бошингиз кадрга тўлиқ тушиши учун телефон бурчагини созланг"
+                if (isSeated) "Stulda o‘tiring — boshingiz kadrga to‘liq tushishi uchun kamerani sozlang"
+                else "Boshingiz kadrga to‘liq tushishi uchun telefon burchagini sozlang",
+                if (isSeated) "Стулда ўтиринг — бошингиз кадрга тўлиқ тушиши учун камерани созланг"
+                else "Бошингиз кадрга тўлиқ тушиши учун телефон бурчагини созланг"
             )
             !hasTorso -> lText(
-                "Kameraga ro‘para turing, gavdangiz aniq ko‘rinishi kerak",
-                "Камерага рўпара туринг, гавдангиз аниқ кўриниши керак"
+                if (isSeated) "Stulda kameraga qarab o‘tiring, yelkangiz va belingiz ko‘rinsin"
+                else "Kameraga ro‘para turing, gavdangiz aniq ko‘rinishi kerak",
+                if (isSeated) "Стулда камерага қараб ўтиринг, елкангиз ва белингиз кўринсин"
+                else "Камерага рўпара туринг, гавдангиз аниқ кўриниши керак"
             )
-            !hasLegs -> lText(
+            !isSeated && !hasLegs -> lText(
                 "Oyoq va tizzalaringiz ko‘rinishi uchun 1-2 qadam orqaga suriling",
                 "Оёқ ва тиззаларингиз кўриниши учун 1-2 қадам орқага сурилинг"
             )
             else -> lText(
-                "Joyingiz qulay! Boshlash uchun tayyorsiz",
-                "Жойингиз қулай! Бошлаш учун тайёрсиз"
+                if (isSeated) "Joyingiz qulay! Stulda tik o‘tirib boshlashingiz mumkin"
+                else "Joyingiz qulay! Boshlash uchun tayyorsiz",
+                if (isSeated) "Жойингиз қулай! Стулда тик ўтириб бошлашингиз мумкин"
+                else "Жойингиз қулай! Бошлаш учун тайёрсиз"
             )
         }
 
@@ -271,33 +323,73 @@ class PrayerPoseAnalyzer(
             frameWidth = frameLandmarks.frameWidth
         )
 
-        val rawPose = classifyRawPose(
-            hasTorso = hasTorso,
-            hasLegs = hasLegs,
-            torsoAngle = torsoAngle,
-            kneeAngle = kneeAngle,
-            headHeightRatio = headHeightRatio,
-            noseNormalizedY = noseNormalizedY,
-            shoulderNormalizedY = avgShoulderNormY,
-            hipNormalizedY = avgHipNormY,
-            shoulderY = shoulder?.y,
-            hipY = hip?.y,
-            wristY = wrist?.y,
-            isFrontalRuku = isFrontalRuku,
-            isHeadTurnedForSalam = isHeadTurned
-        )
+        val rawPose = if (isSeated) {
+            val currentUpperSpanNorm = if (hasHead && hasTorso) {
+                (avgHipNormY - noseNormalizedY).coerceAtLeast(0f)
+            } else null
 
-        // Calibrate upright Qiyom standing height baselines dynamically while user stands straight
-        if (rawPose == PrayerPose.QIYOM || rawPose == PrayerPose.TAKBIR || rawPose == PrayerPose.QAVMA) {
-            if (currentTorsoSpanNorm != null && currentTorsoSpanNorm >= 0.14f) {
-                baselineTorsoSpanNorm = blendBaseline(baselineTorsoSpanNorm, currentTorsoSpanNorm)
+            val lean3dDeg = calculateForwardLeanDegrees(
+                nose = nose,
+                shoulder = shoulder,
+                hip = hip
+            )
+            val baseSeated = baselineSeatedUpperSpanNorm
+            val frontalBowDeg = if (currentUpperSpanNorm != null &&
+                baseSeated != null &&
+                baseSeated > 0.14f &&
+                currentUpperSpanNorm < baseSeated * 0.97f
+            ) {
+                val cosRatio = (currentUpperSpanNorm / baseSeated).coerceIn(0f, 1f)
+                Math.toDegrees(acos(cosRatio.toDouble())).toFloat()
+            } else {
+                0f
             }
-            if (currentNoseAboveAnkleNorm != null && currentNoseAboveAnkleNorm >= 0.35f) {
-                baselineNoseAboveAnkleNorm = blendBaseline(baselineNoseAboveAnkleNorm, currentNoseAboveAnkleNorm)
+            val effectiveLeanDeg = max(lean3dDeg, frontalBowDeg)
+
+            if (effectiveLeanDeg < 12f && currentUpperSpanNorm != null && currentUpperSpanNorm >= 0.14f) {
+                if (baseSeated == null || currentUpperSpanNorm >= baseSeated * 0.96f) {
+                    baselineSeatedUpperSpanNorm = blendBaseline(baseSeated, currentUpperSpanNorm)
+                }
             }
-            if (currentShoulderAboveAnkleNorm != null && currentShoulderAboveAnkleNorm >= 0.25f) {
-                baselineShoulderAboveAnkleNorm = blendBaseline(baselineShoulderAboveAnkleNorm, currentShoulderAboveAnkleNorm)
+
+            classifySeatedRawPose(
+                hasTorso = hasTorso,
+                effectiveLeanDeg = effectiveLeanDeg,
+                shoulderY = shoulder?.y,
+                hipY = hip?.y,
+                wristY = wrist?.y,
+                isHeadTurnedForSalam = isHeadTurned
+            )
+        } else {
+            val classified = classifyRawPose(
+                hasTorso = hasTorso,
+                hasLegs = hasLegs,
+                torsoAngle = torsoAngle,
+                kneeAngle = kneeAngle,
+                headHeightRatio = headHeightRatio,
+                noseNormalizedY = noseNormalizedY,
+                shoulderNormalizedY = avgShoulderNormY,
+                hipNormalizedY = avgHipNormY,
+                shoulderY = shoulder?.y,
+                hipY = hip?.y,
+                wristY = wrist?.y,
+                isFrontalRuku = isFrontalRuku,
+                isHeadTurnedForSalam = isHeadTurned
+            )
+
+            // Calibrate upright Qiyom standing height baselines dynamically while user stands straight
+            if (classified == PrayerPose.QIYOM || classified == PrayerPose.TAKBIR || classified == PrayerPose.QAVMA) {
+                if (currentTorsoSpanNorm != null && currentTorsoSpanNorm >= 0.14f) {
+                    baselineTorsoSpanNorm = blendBaseline(baselineTorsoSpanNorm, currentTorsoSpanNorm)
+                }
+                if (currentNoseAboveAnkleNorm != null && currentNoseAboveAnkleNorm >= 0.35f) {
+                    baselineNoseAboveAnkleNorm = blendBaseline(baselineNoseAboveAnkleNorm, currentNoseAboveAnkleNorm)
+                }
+                if (currentShoulderAboveAnkleNorm != null && currentShoulderAboveAnkleNorm >= 0.25f) {
+                    baselineShoulderAboveAnkleNorm = blendBaseline(baselineShoulderAboveAnkleNorm, currentShoulderAboveAnkleNorm)
+                }
             }
+            classified
         }
 
         // 400ms Debounce state filter
@@ -438,6 +530,41 @@ class PrayerPoseAnalyzer(
         }
 
         return PrayerPose.UNKNOWN
+    }
+
+    /**
+     * Chair / Seated (Imo-ishora) pose classification for elderly or mobility-impaired users:
+     * - Upright seated: QIYOM (or TAKBIR if hands raised)
+     * - Slight head+torso forward bow (15°-30°): RUKU
+     * - Deeper head+torso forward bow (45°-60°+): SAJDA
+     * - Head turned right/left while upright: SALAM
+     */
+    private fun classifySeatedRawPose(
+        hasTorso: Boolean,
+        effectiveLeanDeg: Float,
+        shoulderY: Float?,
+        hipY: Float?,
+        wristY: Float?,
+        isHeadTurnedForSalam: Boolean
+    ): PrayerPose {
+        if (!hasTorso) return PrayerPose.UNKNOWN
+
+        if (effectiveLeanDeg < SEATED_RUKU_MAX_LEAN_DEG && isHeadTurnedForSalam) {
+            return PrayerPose.SALAM
+        }
+        if (effectiveLeanDeg >= SEATED_SAJDA_MIN_LEAN_DEG) {
+            return PrayerPose.SAJDA
+        }
+        if (effectiveLeanDeg in SEATED_RUKU_MIN_LEAN_DEG..SEATED_RUKU_MAX_LEAN_DEG) {
+            return PrayerPose.RUKU
+        }
+        if (wristY != null && shoulderY != null && hipY != null) {
+            val earOrShoulderZone = shoulderY + (hipY - shoulderY) * 0.15f
+            if (wristY <= earOrShoulderZone) {
+                return PrayerPose.TAKBIR
+            }
+        }
+        return PrayerPose.QIYOM
     }
 
     private fun averageNormalizedY(

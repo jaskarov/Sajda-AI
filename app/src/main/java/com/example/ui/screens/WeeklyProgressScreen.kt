@@ -31,15 +31,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,7 +75,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.local.QazoPrayerEntity
 import com.example.domain.model.PrayerType
+import com.example.domain.model.QazoPrayerType
 import com.example.domain.model.TextScript
 import com.example.domain.model.WeeklyChartMode
 import com.example.domain.model.WeeklyPrayerAnalytics
@@ -98,6 +105,8 @@ fun WeeklyProgressScreen(
     uiState: MainUiState,
     onShiftWeek: (Int) -> Unit,
     onTogglePrayerForDay: (String, PrayerType) -> Unit,
+    onIncrementQazo: (QazoPrayerType) -> Unit = {},
+    onDecrementQazo: (QazoPrayerType) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
@@ -293,6 +302,16 @@ fun WeeklyProgressScreen(
                         }
                     }
                 }
+            }
+
+            // Qazo Namozlari Daftari (6 prayer counters backed by Room DB)
+            item {
+                QazoLedgerCard(
+                    qazoProgress = uiState.qazoProgress,
+                    script = script,
+                    onIncrement = onIncrementQazo,
+                    onDecrement = onDecrementQazo
+                )
             }
 
             // Recharts-style BarChart Card
@@ -1052,6 +1071,158 @@ private fun WeeklyPrayerMatrixCard(
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QazoLedgerCard(
+    qazoProgress: QazoPrayerEntity,
+    script: TextScript,
+    onIncrement: (QazoPrayerType) -> Unit,
+    onDecrement: (QazoPrayerType) -> Unit
+) {
+    val totalRemaining = qazoProgress.totalCount()
+    Card(
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("qazo_ledger_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = lText(
+                            "Qazo namozlari daftari",
+                            "Қазо намозлари дафтари"
+                        ).get(script),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = lText(
+                            "O‘qilgan har bir qazoni (-1) bilan kamaytiring",
+                            "Ўқилган ҳар бир қазони (-1) билан камайтиринг"
+                        ).get(script),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Surface(
+                    shape = CircleShape,
+                    color = if (totalRemaining == 0) PoseMatchedGreen.copy(alpha = 0.18f)
+                    else MaterialTheme.colorScheme.primaryContainer
+                ) {
+                    Text(
+                        text = lText(
+                            "Jami: $totalRemaining",
+                            "Жами: $totalRemaining"
+                        ).get(script),
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = if (totalRemaining == 0) PoseMatchedGreen
+                        else MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .testTag("qazo_total_badge")
+                    )
+                }
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+            QazoPrayerType.entries.forEachIndexed { index, type ->
+                val count = qazoProgress.countFor(type)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = type.title.get(script),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = type.rakatSummary.get(script),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilledTonalIconButton(
+                            onClick = { onDecrement(type) },
+                            enabled = count > 0,
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = PoseMatchedGreen.copy(alpha = 0.16f),
+                                contentColor = PoseMatchedGreen
+                            ),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("qazo_dec_${type.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Remove,
+                                contentDescription = lText(
+                                    "${type.title.latin} qazosini kamaytirish",
+                                    "${type.title.cyrillic} қазосини камайтириш"
+                                ).get(script)
+                            )
+                        }
+
+                        Text(
+                            text = count.toString(),
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center,
+                            color = if (count > 0) MaterialTheme.colorScheme.onSurface
+                            else PoseMatchedGreen,
+                            modifier = Modifier
+                                .widthIn(min = 38.dp)
+                                .testTag("qazo_count_${type.id}")
+                        )
+
+                        FilledTonalIconButton(
+                            onClick = { onIncrement(type) },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("qazo_inc_${type.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = lText(
+                                    "${type.title.latin} qazosini qo‘shish",
+                                    "${type.title.cyrillic} қазосини қўшиш"
+                                ).get(script)
+                            )
+                        }
+                    }
+                }
+                if (index < QazoPrayerType.entries.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                 }
             }
         }

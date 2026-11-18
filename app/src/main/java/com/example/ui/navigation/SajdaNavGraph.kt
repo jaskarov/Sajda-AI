@@ -209,6 +209,8 @@ fun SajdaNavGraph(
                         uiState = mainUiState,
                         onShiftWeek = mainViewModel::shiftWeek,
                         onTogglePrayerForDay = mainViewModel::togglePrayerCompletedForDay,
+                        onIncrementQazo = mainViewModel::incrementQazo,
+                        onDecrementQazo = mainViewModel::decrementQazo,
                         modifier = Modifier.padding(innerPadding)
                     )
                     else -> {
@@ -248,6 +250,7 @@ fun SajdaNavGraph(
                         popUpTo<CalibrationRoute> { inclusive = true }
                     }
                 },
+                onSeatedModeToggle = coachViewModel::setSeatedPrayerMode,
                 onExit = { navController.popBackStack() }
             )
         }
@@ -292,6 +295,7 @@ fun SajdaNavGraph(
                 onPreferOfflineMp3Toggle = mainViewModel::setPreferOfflineMp3,
                 onVoiceSpeedChange = mainViewModel::setVoiceSpeed,
                 onDarkThresholdChange = mainViewModel::setDarkRoomThreshold,
+                onSeatedModeToggle = mainViewModel::setSeatedPrayerMode,
                 onSyncCalendarNow = mainViewModel::syncPrayerCalendarNow,
                 onOpenPermissions = {
                     navController.navigate(PermissionsRoute(fromSettings = true))

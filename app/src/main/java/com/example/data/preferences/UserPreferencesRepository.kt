@@ -24,6 +24,7 @@ data class UserSettings(
     val preferOfflineMp3: Boolean = true,
     val voiceSpeed: Float = 1.0f,
     val darkRoomLuminanceThreshold: Float = 28f,
+    val seatedPrayerMode: Boolean = false,
     val alarmMap: Map<PrayerType, Boolean> = PrayerType.entries.associateWith { it.isPrayable }
 )
 
@@ -37,6 +38,7 @@ class UserPreferencesRepository(private val context: Context) {
         val PREFER_OFFLINE_MP3 = booleanPreferencesKey("prefer_offline_mp3")
         val VOICE_SPEED = floatPreferencesKey("voice_speed")
         val DARK_THRESHOLD = floatPreferencesKey("dark_threshold")
+        val SEATED_PRAYER_MODE = booleanPreferencesKey("seated_prayer_mode")
         fun alarmKey(type: PrayerType) = booleanPreferencesKey("alarm_${type.id}")
     }
 
@@ -52,6 +54,7 @@ class UserPreferencesRepository(private val context: Context) {
             preferOfflineMp3 = prefs[Keys.PREFER_OFFLINE_MP3] ?: true,
             voiceSpeed = prefs[Keys.VOICE_SPEED] ?: 1.0f,
             darkRoomLuminanceThreshold = prefs[Keys.DARK_THRESHOLD] ?: 28f,
+            seatedPrayerMode = prefs[Keys.SEATED_PRAYER_MODE] ?: false,
             alarmMap = alarms
         )
     }
@@ -91,5 +94,9 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun setPrayerAlarmEnabled(type: PrayerType, enabled: Boolean) {
         context.dataStore.edit { it[Keys.alarmKey(type)] = enabled }
+    }
+
+    suspend fun setSeatedPrayerMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.SEATED_PRAYER_MODE] = enabled }
     }
 }
