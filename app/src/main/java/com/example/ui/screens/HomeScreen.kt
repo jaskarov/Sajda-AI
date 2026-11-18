@@ -269,6 +269,18 @@ fun HomeScreen(
                             )
                         }
 
+                        val chainedNextTrack = selectedTrack.nextContinuationTrack()
+                        if (chainedNextTrack != null) {
+                            Text(
+                                text = lText(
+                                    "Uzluksiz oqim: ${selectedTrack.title.latin} → ${chainedNextTrack.title.latin}",
+                                    "Узлуксиз оқим: ${selectedTrack.title.cyrillic} → ${chainedNextTrack.title.cyrillic}"
+                                ).get(script),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFFFE5A3)
+                            )
+                        }
+
                         // Selectable Rakat / Track Chips
                         Row(
                             modifier = Modifier

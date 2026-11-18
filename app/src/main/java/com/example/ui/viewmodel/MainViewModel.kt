@@ -44,7 +44,11 @@ import kotlinx.coroutines.launch
 data class CompassUiState(
     val compassAzimuth: Float = 0f,
     val compassAccuracy: Int = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
-    val hasCompassSensor: Boolean = true
+    val hasCompassSensor: Boolean = true,
+    val tiltX: Float = 0f,
+    val tiltY: Float = 0f,
+    val tiltDegrees: Float = 0f,
+    val isLevel: Boolean = true
 )
 
 data class MainUiState(
@@ -187,7 +191,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 CompassUiState(
                     compassAzimuth = trueAzimuth,
                     compassAccuracy = reading.accuracy,
-                    hasCompassSensor = reading.hasSensor
+                    hasCompassSensor = reading.hasSensor,
+                    tiltX = reading.tiltX,
+                    tiltY = reading.tiltY,
+                    tiltDegrees = reading.tiltDegrees,
+                    isLevel = reading.isLevel
                 )
             }
         }.stateIn(

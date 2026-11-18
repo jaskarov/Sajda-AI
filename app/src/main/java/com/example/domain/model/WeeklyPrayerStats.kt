@@ -96,9 +96,10 @@ object WeeklyPrayerAnalytics {
         weekOffset: Int = 0,
         referenceTimeMillis: Long = System.currentTimeMillis()
     ): Pair<String, String> {
+        val tz = TimeZone.getTimeZone("Asia/Tashkent")
         val monday = mondayOfWeek(weekOffset, referenceTimeMillis)
         val sunday = (monday.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 6) }
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = tz }
         return fmt.format(monday.time) to fmt.format(sunday.time)
     }
 

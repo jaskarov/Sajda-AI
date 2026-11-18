@@ -62,7 +62,7 @@ class PrayerEngineUnitTest {
     fun countdown_matchesSystemLocalTimeExactly() {
         val useCase = GetPrayerTimesUseCase()
         val city = UzbekistanCities.findById("toshkent")
-        val cal = java.util.Calendar.getInstance().apply {
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent")).apply {
             set(2026, java.util.Calendar.NOVEMBER, 15, 3, 37, 30)
             set(java.util.Calendar.MILLISECOND, 0)
         }
@@ -78,5 +78,16 @@ class PrayerEngineUnitTest {
         val nowSec = 3 * 3600L + 37 * 60L + 30L
         val targetSec = nextSlot.hour * 3600L + nextSlot.minute * 60L
         assertEquals(targetSec - nowSec, summary.countdownSeconds)
+    }
+
+    @Test
+    fun trackContinuationAndPostRecitationCues_areConfigured() {
+        assertEquals(PrayerTrack.BOMDOD_FARZ, PrayerTrack.BOMDOD_SUNNAT.nextContinuationTrack())
+        assertEquals(PrayerTrack.PESHIN_FARZ, PrayerTrack.PESHIN_SUNNAT_1.nextContinuationTrack())
+        assertEquals(PrayerTrack.VITR_VOJIB, PrayerTrack.XUFTON_FARZ.nextContinuationTrack())
+
+        val steps = PrayerSequenceEngine().buildSteps(PrayerTrack.BOMDOD_SUNNAT, Gender.MALE)
+        val zamSura = steps.first { it.stepTitle.latin.contains("Zam sura") }
+        assertTrue(zamSura.postRecitationCue?.latin?.contains("rukuga") == true)
     }
 }

@@ -271,11 +271,15 @@ fun SajdaNavGraph(
                 onPoseResult = coachViewModel::onPoseSnapshot,
                 onTogglePause = coachViewModel::togglePause,
                 onNextStep = coachViewModel::advanceToNextStep,
+                onStartNextTrack = coachViewModel::startNextContinuationTrack,
                 onSwitchToAudioOnly = {
                     coachViewModel.switchToAudioOnly(FallbackReason.USER_SELECTED)
                 },
                 onSwitchToCamera = coachViewModel::switchToCameraMode,
-                onExit = { navController.popBackStack() }
+                onExit = {
+                    coachViewModel.cancelContinuationCountdown()
+                    navController.popBackStack()
+                }
             )
         }
 

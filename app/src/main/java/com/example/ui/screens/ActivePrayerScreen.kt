@@ -76,6 +76,7 @@ import com.example.audio.AudioCoachStatus
 import com.example.domain.model.CoachMode
 import com.example.domain.model.FallbackReason
 import com.example.domain.model.PoseAnalysisSnapshot
+import com.example.domain.model.PrayerTrack
 import com.example.domain.model.lText
 import com.example.ui.components.CameraPosePreview
 import com.example.ui.theme.JetBrainsMonoFontFamily
@@ -96,6 +97,7 @@ fun ActivePrayerScreen(
     onPoseResult: (PoseAnalysisSnapshot) -> Unit,
     onTogglePause: () -> Unit,
     onNextStep: () -> Unit,
+    onStartNextTrack: () -> Unit = {},
     onSwitchToAudioOnly: () -> Unit,
     onSwitchToCamera: () -> Unit,
     onExit: () -> Unit
@@ -116,6 +118,7 @@ fun ActivePrayerScreen(
     if (uiState.isCompleted) {
         PrayerCompletedView(
             uiState = uiState,
+            onStartNextTrack = onStartNextTrack,
             onFinish = onExit
         )
         return
@@ -424,6 +427,15 @@ fun ActivePrayerScreen(
                                 letterSpacing = 0.8.sp
                             )
 
+                            SurahRecitationVisualizer(
+                                progress = uiState.playbackProgress,
+                                isPaused = uiState.isPaused,
+                                isAudioFinished = uiState.stepAudioDone || uiState.isPostRecitationCueActive,
+                                isPostCueActive = uiState.isPostRecitationCueActive,
+                                postCueText = step.postRecitationCue?.get(script),
+                                script = script
+                            )
+
                             Text(
                                 text = step.arabicText,
                                 fontSize = arabicFontSize,
@@ -644,11 +656,116 @@ private fun AudioStatusBanner(status: AudioCoachStatus) {
 }
 
 @Composable
+private fun SurahRecitationVisualizer(
+    progress: Float,
+    isPaused: Boolean,
+    isAudioFinished: Boolean,
+    isPostCueActive: Boolean,
+    postCueText: String?,
+    script: com.example.domain.model.TextScript
+) {
+    val clampedProgress = progress.coerceIn(0f, 1f)
+    val percent = (clampedProgress * 100f).roundToInt()
+    val infiniteTransition = rememberInfiniteTransition(label = "surah_wave")
+    val barMultipliers = listOf(0.45f, 0.85f, 0.6f, 1.0f, 0.7f, 0.9f, 0.5f)
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(550),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "wave_phase"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (isAudioFinished) PoseMatchedGreen.copy(alpha = 0.14f)
+        else ObsidianSurfaceVariant.copy(alpha = 0.85f),
+        border = BorderStroke(
+            1.dp,
+            if (isAudioFinished) PoseMatchedGreen.copy(alpha = 0.55f)
+            else NightEmeraldPrimary.copy(alpha = 0.32f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("surah_visualizer_card")
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    barMultipliers.forEachIndexed { idx, base ->
+                        val heightFraction = when {
+                            isAudioFinished -> 0.35f
+                            isPaused -> base * 0.45f
+                            idx % 2 == 0 -> (base * phase).coerceIn(0.25f, 1f)
+                            else -> (base * (1.35f - phase)).coerceIn(0.25f, 1f)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height((18f * heightFraction).dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isAudioFinished) PoseMatchedGreen else NightGold
+                                )
+                        )
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = when {
+                            isPostCueActive && !postCueText.isNullOrBlank() -> postCueText
+                            isAudioFinished -> lText("Qiroat tugadi ✓", "Қироат тугади ✓").get(script)
+                            else -> lText("Qiroat jarayoni", "Қироат жараёни").get(script)
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isAudioFinished) PoseMatchedGreen else Color.White,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+
+                Text(
+                    text = "$percent%",
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isAudioFinished) PoseMatchedGreen else NightGold
+                )
+            }
+
+            LinearProgressIndicator(
+                progress = { clampedProgress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(5.dp)
+                    .clip(CircleShape)
+                    .testTag("surah_playback_progress"),
+                color = if (isAudioFinished) PoseMatchedGreen else NightGold,
+                trackColor = Color.White.copy(alpha = 0.14f)
+            )
+        }
+    }
+}
+
+@Composable
 private fun PrayerCompletedView(
     uiState: PrayerCoachUiState,
+    onStartNextTrack: () -> Unit,
     onFinish: () -> Unit
 ) {
     val script = uiState.settings.script
+    val nextTrack = uiState.pendingNextTrack
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -683,25 +800,117 @@ private fun PrayerCompletedView(
                 Text(
                     text = "${uiState.track.title.get(script)} • ${uiState.totalSessionSeconds}s",
                     style = MaterialTheme.typography.titleMedium,
-                    color = NightGold
+                    color = NightGold,
+                    textAlign = TextAlign.Center
                 )
-                Button(
-                    onClick = onFinish,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("prayer_completed_home_button"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = NightEmeraldPrimary,
-                        contentColor = Color(0xFF00291D)
-                    )
-                ) {
-                    Text(
-                        text = lText("Asosiy ekranga qaytish", "Асосий экранга қайтиш").get(script),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+
+                if (nextTrack != null) {
+                    val isVitrNext = nextTrack == PrayerTrack.VITR_VOJIB
+                    val bannerTitleLat = if (isVitrNext) {
+                        "Xufton farz tugadi. ${uiState.nextTrackCountdownSec} soniyada Vitr namozi (${nextTrack.rakatCount} rakat) boshlanadi"
+                    } else {
+                        "Sunnat namozi tugadi. ${uiState.nextTrackCountdownSec} soniyada Farz namozi (${nextTrack.rakatCount} rakat) boshlanadi"
+                    }
+                    val bannerTitleCyr = if (isVitrNext) {
+                        "Хуфтон фарз тугади. ${uiState.nextTrackCountdownSec} сонияда Витр намози (${nextTrack.rakatCount} ракат) бошланади"
+                    } else {
+                        "Суннат намози тугади. ${uiState.nextTrackCountdownSec} сонияда Фарз намози (${nextTrack.rakatCount} ракат) бошланади"
+                    }
+                    val nextBtnLabel = if (isVitrNext) {
+                        lText("Vitrni boshlash", "Витрни бошлаш").get(script)
+                    } else {
+                        lText("Farzni boshlash", "Фарзни бошлаш").get(script)
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = NightEmeraldPrimary.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.55f)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("sunnat_to_farz_continuation_card")
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = lText(bannerTitleLat, bannerTitleCyr).get(script),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                            LinearProgressIndicator(
+                                progress = {
+                                    ((5 - uiState.nextTrackCountdownSec).coerceIn(0, 5)) / 5f
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(CircleShape),
+                                color = NightGold,
+                                trackColor = Color.White.copy(alpha = 0.16f)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onStartNextTrack,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("start_next_track_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NightEmeraldPrimary,
+                            contentColor = Color(0xFF00291D)
+                        )
+                    ) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = nextBtnLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onFinish,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("prayer_completed_home_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Text(
+                            text = lText("Asosiy ekranga qaytish", "Асосий экранга қайтиш").get(script),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                } else {
+                    Button(
+                        onClick = onFinish,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("prayer_completed_home_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = NightEmeraldPrimary,
+                            contentColor = Color(0xFF00291D)
+                        )
+                    ) {
+                        Text(
+                            text = lText("Asosiy ekranga qaytish", "Асосий экранга қайтиш").get(script),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

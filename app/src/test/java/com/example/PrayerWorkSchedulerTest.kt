@@ -114,7 +114,8 @@ class PrayerWorkSchedulerTest {
     fun computeNextSlotAndTriggerMillis_rollsOverToTomorrowAndUsesCalendarDb() {
         val scheduler = PrayerWorkScheduler(context, workManager)
         val city = UzbekistanCities.findById("toshkent")
-        val lateNight = Calendar.getInstance().apply {
+        val tashkentTz = java.util.TimeZone.getTimeZone("Asia/Tashkent")
+        val lateNight = Calendar.getInstance(tashkentTz).apply {
             set(2026, Calendar.NOVEMBER, 15, 23, 55, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
@@ -144,7 +145,7 @@ class PrayerWorkSchedulerTest {
 
         assertTrue(result.second > lateNight)
         assertEquals("05:54", result.first.timeFormatted)
-        val triggerCal = Calendar.getInstance().apply { timeInMillis = result.second }
+        val triggerCal = Calendar.getInstance(tashkentTz).apply { timeInMillis = result.second }
         assertEquals(16, triggerCal.get(Calendar.DAY_OF_MONTH))
         assertEquals(5, triggerCal.get(Calendar.HOUR_OF_DAY))
         assertEquals(54, triggerCal.get(Calendar.MINUTE))

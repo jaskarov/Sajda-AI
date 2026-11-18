@@ -81,9 +81,12 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Qo'llaringizni bog'lang. ${PrayerContentCatalog.surahs[0].ttsPrompt}",
                     minHoldDurationMs = 7000L,
-                    audioAssetId = PrayerContentCatalog.surahs[0].audioAssetId
+                    audioAssetId = PrayerContentCatalog.surahs[0].audioAssetId,
+                    postRecitationCue = lText("Endi Fotiha surasini o‘qing", "Энди Фотиҳа сурасини ўқинг")
                 )
             }
+
+            val hasZamSura = rakat <= 2 || !isFarz
 
             // Fotiha in every rakat
             steps += PrayerStep(
@@ -98,19 +101,23 @@ class PrayerSequenceEngine {
                 recitationCyrillic = PrayerContentCatalog.surahs[1].translitCyrillic,
                 meaning = PrayerContentCatalog.surahs[1].meaning,
                 coachInstruction = lText(
-                    if (rakat <= 2 || !isFarz) "Fotiha surasidan so‘ng zam sura o‘qiladi"
+                    if (hasZamSura) "Fotiha surasidan so‘ng zam sura o‘qiladi"
                     else "Sura tugagach, rukuga egiling",
-                    if (rakat <= 2 || !isFarz) "Фотиҳа сурасидан сўнг зам сура ўқилади"
+                    if (hasZamSura) "Фотиҳа сурасидан сўнг зам сура ўқилади"
                     else "Сура тугагач, рукуга эгилинг"
                 ),
                 ttsPrompt = PrayerContentCatalog.surahs[1].ttsPrompt,
                 minHoldDurationMs = 15000L,
                 requiresPoseTransition = rakat > 1,
-                audioAssetId = PrayerContentCatalog.surahs[1].audioAssetId
+                audioAssetId = PrayerContentCatalog.surahs[1].audioAssetId,
+                postRecitationCue = if (hasZamSura) {
+                    lText("Endi zam surani o‘qing", "Энди зам сурани ўқинг")
+                } else {
+                    lText("Allohu akbar, rukuga boring", "Аллоҳу акбар, рукуга боринг")
+                }
             )
 
             // Zam sura in rakats 1 & 2, or all rakats for sunnat/vitr
-            val hasZamSura = rakat <= 2 || !isFarz
             if (hasZamSura) {
                 val zamSura = when (rakat) {
                     1 -> PrayerContentCatalog.surahs[2] // Kavsar
@@ -140,7 +147,12 @@ class PrayerSequenceEngine {
                     ttsPrompt = zamSura.ttsPrompt,
                     minHoldDurationMs = 9000L,
                     requiresPoseTransition = false,
-                    audioAssetId = zamSura.audioAssetId
+                    audioAssetId = zamSura.audioAssetId,
+                    postRecitationCue = if (isVitr && rakat == 3) {
+                        lText("Allohu akbar, Qunut duosini o‘qing", "Аллоҳу акбар, Қунут дуосини ўқинг")
+                    } else {
+                        lText("Allohu akbar, rukuga boring", "Аллоҳу акбар, рукуга боринг")
+                    }
                 )
             }
 
@@ -166,7 +178,8 @@ class PrayerSequenceEngine {
                     ttsPrompt = "Allohu akbar. Allohumma inna nasta'iynuka va nastag'firuk, va nu'minu bika va natavakkalu alayk.",
                     minHoldDurationMs = 10000L,
                     requiresPoseTransition = false,
-                    audioAssetId = "qunut"
+                    audioAssetId = "qunut",
+                    postRecitationCue = lText("Allohu akbar, rukuga boring", "Аллоҳу акбар, рукуга боринг")
                 )
             }
 
@@ -311,7 +324,11 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
                     minHoldDurationMs = 12000L,
-                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId
+                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId,
+                    postRecitationCue = lText(
+                        "Allohu akbar, navbatdagi rakatga turing",
+                        "Аллоҳу акбар, навбатдаги ракатга туринг"
+                    )
                 )
             }
 
@@ -334,7 +351,11 @@ class PrayerSequenceEngine {
                     ),
                     ttsPrompt = "Allohu akbar. ${PrayerContentCatalog.surahs[5].ttsPrompt}",
                     minHoldDurationMs = 12000L,
-                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId
+                    audioAssetId = PrayerContentCatalog.surahs[5].audioAssetId,
+                    postRecitationCue = lText(
+                        "Endi Salovat va Robbana duosini o‘qing",
+                        "Энди Саловат ва Роббана дуосини ўқинг"
+                    )
                 )
 
                 steps += PrayerStep(
@@ -355,7 +376,11 @@ class PrayerSequenceEngine {
                     ttsPrompt = "${PrayerContentCatalog.surahs[6].ttsPrompt} ${PrayerContentCatalog.surahs[7].ttsPrompt}",
                     minHoldDurationMs = 12000L,
                     requiresPoseTransition = false,
-                    audioAssetId = "salovat,robbana"
+                    audioAssetId = "salovat,robbana",
+                    postRecitationCue = lText(
+                        "O‘ng va chap yelkaga salom bering",
+                        "Ўнг ва чап елкага салом беринг"
+                    )
                 )
 
                 steps += PrayerStep(

@@ -73,7 +73,7 @@ class DailyPrayerProgressDaoTest {
     @Test
     fun observeDaysInRange_andWeeklyAnalytics_computeAccuratePercentages() = runTest {
         // Week of 2026-11-09 (Mon) .. 2026-11-15 (Sun)
-        val cal = java.util.Calendar.getInstance().apply {
+        val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent")).apply {
             set(2026, java.util.Calendar.NOVEMBER, 15, 12, 0, 0)
         }
         val (startKey, endKey) = com.example.domain.model.WeeklyPrayerAnalytics.weekBounds(

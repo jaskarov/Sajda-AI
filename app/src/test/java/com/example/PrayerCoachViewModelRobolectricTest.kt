@@ -99,4 +99,29 @@ class PrayerCoachViewModelRobolectricTest {
         viewModel.advanceToNextStep()
         assertEquals(1, viewModel.uiState.value.currentStepIndex)
     }
+
+    @Test
+    fun completingBomdodSunnat_offersBomdodFarzContinuationAndStartsIt() {
+        viewModel.startActivePrayerSession(
+            track = PrayerTrack.BOMDOD_SUNNAT,
+            mode = CoachMode.AUDIO_ONLY,
+            fallbackReason = FallbackReason.NONE
+        )
+        val totalSteps = viewModel.uiState.value.steps.size
+        repeat(totalSteps) {
+            viewModel.advanceToNextStep()
+        }
+
+        val completedState = viewModel.uiState.value
+        assertTrue(completedState.isCompleted)
+        assertEquals(PrayerTrack.BOMDOD_FARZ, completedState.pendingNextTrack)
+        assertTrue(completedState.nextTrackCountdownSec in 1..5)
+
+        viewModel.startNextContinuationTrack()
+        val farzState = viewModel.uiState.value
+        assertFalse(farzState.isCompleted)
+        assertEquals(PrayerTrack.BOMDOD_FARZ, farzState.track)
+        assertEquals(0, farzState.currentStepIndex)
+        assertEquals(null, farzState.pendingNextTrack)
+    }
 }

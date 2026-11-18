@@ -8,7 +8,8 @@ import com.example.domain.model.lText
 import com.google.mlkit.vision.pose.PoseLandmark
 import java.nio.ByteBuffer
 import kotlin.math.abs
-import kotlin.math.atan2
+import kotlin.math.acos
+import kotlin.math.sqrt
 
 /**
  * Real-time CameraX ImageAnalysis.Analyzer backed by [PoseDetectionAnalyzerHelper]
@@ -18,9 +19,10 @@ import kotlin.math.atan2
  * - Zero-Storage Policy: frames stay in RAM and imageProxy.close() is always invoked.
  * - 15 FPS rate limiting (~66ms minimum frame interval) for thermal/battery efficiency.
  * - Y-plane luminance sampling to detect dark rooms and trigger 'Faqat Audio' fallback.
- * - Geometric calculation of torso angle (SHOULDER-HIP-KNEE), knee angle (HIP-KNEE-ANKLE),
- *   head height coefficient (NOSE.y - ANKLE.y ratio), and wrist elevation.
- * - 400ms debounce filter before confirming Qiyom, Takbir, Ruku, Sajda, or Qada states.
+ * - 3D spatial vector dot-product angles (SHOULDER-HIP-KNEE, HIP-KNEE-ANKLE) plus frontal view rules
+ *   for Ruku (40-55% height drop approaching hip level), Sajda (nose/shoulders Y > 0.75 + bent knees),
+ *   and Salam (left/right head turn via NOSE, LEFT_EAR, RIGHT_EAR asymmetry).
+ * - 400ms debounce filter before confirming Qiyom, Takbir, Ruku, Sajda, Qada, or Salam states.
  */
 class PrayerPoseAnalyzer(
     @Volatile var isFrontCamera: Boolean = true,
@@ -33,6 +35,80 @@ class PrayerPoseAnalyzer(
         private const val DEBOUNCE_DURATION_MS = 400L
         private const val DARK_FRAMES_TRIGGER_COUNT = 25 // ~1.7-2.5s of dark frames
         private const val MIN_CONFIDENCE = 0.45f
+
+        const val FRONTAL_RUKU_SPAN_RETENTION_MAX = 0.60f // >= 40% vertical drop vs Qiyom
+        const val FRONTAL_RUKU_HEIGHT_MIN_RATIO = 0.30f
+        const val FRONTAL_RUKU_HEIGHT_MAX_RATIO = 0.62f   // 38%..70% upper-body height drop
+        const val FRONTAL_SAJDA_NOSE_Y_MIN = 0.75f
+        const val FRONTAL_SAJDA_SHOULDER_Y_MIN = 0.70f
+        const val SALAM_YAW_ASYMMETRY_THRESHOLD = 0.42f
+
+        /**
+         * Calculates the 3D angle (0..180 degrees) at [midPoint] between vectors
+         * (firstPoint - midPoint) and (lastPoint - midPoint) via vector dot product.
+         */
+        fun calculateAngle3D(
+            firstPoint: ExtractedPoseLandmark,
+            midPoint: ExtractedPoseLandmark,
+            lastPoint: ExtractedPoseLandmark
+        ): Float {
+            val v1x = (firstPoint.x - midPoint.x).toDouble()
+            val v1y = (firstPoint.y - midPoint.y).toDouble()
+            val v1z = (firstPoint.z - midPoint.z).toDouble()
+
+            val v2x = (lastPoint.x - midPoint.x).toDouble()
+            val v2y = (lastPoint.y - midPoint.y).toDouble()
+            val v2z = (lastPoint.z - midPoint.z).toDouble()
+
+            val mag1 = sqrt(v1x * v1x + v1y * v1y + v1z * v1z)
+            val mag2 = sqrt(v2x * v2x + v2y * v2y + v2z * v2z)
+            if (mag1 < 1e-4 || mag2 < 1e-4) return 0f
+
+            val dot = v1x * v2x + v1y * v2y + v1z * v2z
+            val cosTheta = (dot / (mag1 * mag2)).coerceIn(-1.0, 1.0)
+            return Math.toDegrees(acos(cosTheta)).toFloat()
+        }
+
+        /**
+         * Detects left/right head turn (Salam) from horizontal asymmetry between NOSE and EARS.
+         */
+        fun isHeadTurnedForSalam(
+            nose: ExtractedPoseLandmark?,
+            leftEar: ExtractedPoseLandmark?,
+            rightEar: ExtractedPoseLandmark?,
+            leftShoulder: ExtractedPoseLandmark? = null,
+            rightShoulder: ExtractedPoseLandmark? = null,
+            frameWidth: Int = 480
+        ): Boolean {
+            if (!isReliableStatic(nose)) return false
+            val n = nose!!
+            val hasLeft = isReliableStatic(leftEar)
+            val hasRight = isReliableStatic(rightEar)
+
+            if (hasLeft && hasRight) {
+                val dLeft = abs(n.x - leftEar!!.x)
+                val dRight = abs(n.x - rightEar!!.x)
+                val total = dLeft + dRight
+                if (total > 1e-3f) {
+                    val asymmetry = abs(dLeft - dRight) / total
+                    if (asymmetry >= SALAM_YAW_ASYMMETRY_THRESHOLD) return true
+                }
+            } else if (hasLeft xor hasRight) {
+                // When turned sharply sideways, one ear is occluded while shoulders face camera
+                val visibleEar = (if (hasLeft) leftEar else rightEar)!!
+                val shoulderSpan = if (isReliableStatic(leftShoulder) && isReliableStatic(rightShoulder)) {
+                    abs(leftShoulder!!.x - rightShoulder!!.x)
+                } else 0f
+                if (shoulderSpan >= frameWidth * 0.14f) {
+                    val noseEarDx = abs(n.x - visibleEar.x)
+                    if (noseEarDx >= shoulderSpan * 0.18f) return true
+                }
+            }
+            return false
+        }
+
+        private fun isReliableStatic(lm: ExtractedPoseLandmark?): Boolean =
+            lm != null && lm.inFrameLikelihood >= MIN_CONFIDENCE
     }
 
     @Volatile
@@ -45,6 +121,11 @@ class PrayerPoseAnalyzer(
     private var candidateSinceMs: Long = 0L
     private var confirmedPose: PrayerPose = PrayerPose.UNKNOWN
     private var consecutiveDarkFrames = 0
+
+    // Qiyom standing height baselines for frontal Ruku detection
+    private var baselineTorsoSpanNorm: Float? = null
+    private var baselineNoseAboveAnkleNorm: Float? = null
+    private var baselineShoulderAboveAnkleNorm: Float? = null
 
     private val poseHelper = PoseDetectionAnalyzerHelper(
         minFrameIntervalMs = MIN_FRAME_INTERVAL_MS,
@@ -59,7 +140,7 @@ class PrayerPoseAnalyzer(
             latestIsRoomTooDark = consecutiveDarkFrames >= DARK_FRAMES_TRIGGER_COUNT
         },
         onLandmarksExtracted = { frameLandmarks ->
-            val snapshot = evaluatePose(
+            val snapshot = evaluateFrame(
                 frameLandmarks = frameLandmarks,
                 luminance = latestLuminance,
                 isRoomTooDark = latestIsRoomTooDark
@@ -76,12 +157,14 @@ class PrayerPoseAnalyzer(
         poseHelper.close()
     }
 
-    private fun evaluatePose(
+    fun evaluateFrame(
         frameLandmarks: PoseFrameLandmarks,
-        luminance: Float,
-        isRoomTooDark: Boolean
+        luminance: Float = 128f,
+        isRoomTooDark: Boolean = false
     ): PoseAnalysisSnapshot {
         val nose = frameLandmarks.landmark(PoseLandmark.NOSE)
+        val lEar = frameLandmarks.landmark(PoseLandmark.LEFT_EAR)
+        val rEar = frameLandmarks.landmark(PoseLandmark.RIGHT_EAR)
         val lShoulder = frameLandmarks.landmark(PoseLandmark.LEFT_SHOULDER)
         val rShoulder = frameLandmarks.landmark(PoseLandmark.RIGHT_SHOULDER)
         val lHip = frameLandmarks.landmark(PoseLandmark.LEFT_HIP)
@@ -131,7 +214,7 @@ class PrayerPoseAnalyzer(
             )
         }
 
-        // Calculate geometric angles
+        // Calculate 3D geometric angles using vector dot product (position3D x, y, z)
         val torsoAngle = computeSideAverageAngle(
             leftA = lShoulder, leftB = lHip, leftC = lKnee,
             rightA = rShoulder, rightB = rHip, rightC = rKnee
@@ -155,18 +238,67 @@ class PrayerPoseAnalyzer(
             0.5f
         }
 
+        val avgShoulderNormY = averageNormalizedY(lShoulder, rShoulder) ?: shoulder?.normalizedY ?: 0.5f
+        val avgHipNormY = averageNormalizedY(lHip, rHip) ?: hip?.normalizedY ?: 0.6f
+        val avgAnkleNormY = averageNormalizedY(lAnkle, rAnkle) ?: ankle?.normalizedY
         val noseNormalizedY = nose?.normalizedY ?: 0.5f
+
+        val currentTorsoSpanNorm = if (hasTorso) abs(avgHipNormY - avgShoulderNormY) else null
+        val currentNoseAboveAnkleNorm = if (nose != null && avgAnkleNormY != null) {
+            (avgAnkleNormY - noseNormalizedY).coerceAtLeast(0f)
+        } else null
+        val currentShoulderAboveAnkleNorm = if (shoulder != null && avgAnkleNormY != null) {
+            (avgAnkleNormY - avgShoulderNormY).coerceAtLeast(0f)
+        } else null
+
+        val isFrontalRuku = detectFrontalRuku(
+            hasTorso = hasTorso,
+            kneeAngle = kneeAngle,
+            currentTorsoSpanNorm = currentTorsoSpanNorm,
+            currentNoseAboveAnkleNorm = currentNoseAboveAnkleNorm,
+            currentShoulderAboveAnkleNorm = currentShoulderAboveAnkleNorm,
+            avgShoulderNormY = avgShoulderNormY,
+            avgHipNormY = avgHipNormY,
+            avgAnkleNormY = avgAnkleNormY
+        )
+
+        val isHeadTurned = isHeadTurnedForSalam(
+            nose = nose,
+            leftEar = lEar,
+            rightEar = rEar,
+            leftShoulder = lShoulder,
+            rightShoulder = rShoulder,
+            frameWidth = frameLandmarks.frameWidth
+        )
 
         val rawPose = classifyRawPose(
             hasTorso = hasTorso,
+            hasLegs = hasLegs,
             torsoAngle = torsoAngle,
             kneeAngle = kneeAngle,
             headHeightRatio = headHeightRatio,
             noseNormalizedY = noseNormalizedY,
+            shoulderNormalizedY = avgShoulderNormY,
+            hipNormalizedY = avgHipNormY,
             shoulderY = shoulder?.y,
             hipY = hip?.y,
-            wristY = wrist?.y
+            wristY = wrist?.y,
+            isFrontalRuku = isFrontalRuku,
+            isHeadTurnedForSalam = isHeadTurned
         )
+
+        // Calibrate upright Qiyom standing height baselines dynamically while user stands straight
+        if (rawPose == PrayerPose.QIYOM || rawPose == PrayerPose.TAKBIR || rawPose == PrayerPose.QAVMA) {
+            if (currentTorsoSpanNorm != null && currentTorsoSpanNorm >= 0.14f) {
+                baselineTorsoSpanNorm = blendBaseline(baselineTorsoSpanNorm, currentTorsoSpanNorm)
+            }
+            if (currentNoseAboveAnkleNorm != null && currentNoseAboveAnkleNorm >= 0.35f) {
+                baselineNoseAboveAnkleNorm = blendBaseline(baselineNoseAboveAnkleNorm, currentNoseAboveAnkleNorm)
+            }
+            if (currentShoulderAboveAnkleNorm != null && currentShoulderAboveAnkleNorm >= 0.25f) {
+                baselineShoulderAboveAnkleNorm = blendBaseline(baselineShoulderAboveAnkleNorm, currentShoulderAboveAnkleNorm)
+            }
+        }
 
         // 400ms Debounce state filter
         if (rawPose != PrayerPose.UNKNOWN) {
@@ -197,49 +329,106 @@ class PrayerPoseAnalyzer(
         )
     }
 
-    /**
-     * Implements PRD 2.3 mathematical classification rules:
-     * - QIYOM: theta_torso in [160°, 185°], theta_knee > 160°, wrists near chest/navel
-     * - TAKBIR: upright + wrists elevated near/above shoulders
-     * - RUKU: theta_torso in [70°, 120°], theta_knee > 155°
-     * - SAJDA: minimal vertical nose-to-ankle distance (< 0.18 frame height) & theta_knee < 68°
-     * - QADA: theta_torso in [70°, 115°], theta_knee < 58° & nose in upper/mid zone
-     */
+    private fun detectFrontalRuku(
+        hasTorso: Boolean,
+        kneeAngle: Float,
+        currentTorsoSpanNorm: Float?,
+        currentNoseAboveAnkleNorm: Float?,
+        currentShoulderAboveAnkleNorm: Float?,
+        avgShoulderNormY: Float,
+        avgHipNormY: Float,
+        avgAnkleNormY: Float?
+    ): Boolean {
+        if (!hasTorso || kneeAngle < 135f) return false
+
+        // 1. Compare current torso span & height against calibrated Qiyom standing baseline (40-55%+ drop)
+        val baseTorso = baselineTorsoSpanNorm
+        val shoulderApproachesHip = currentTorsoSpanNorm != null &&
+            baseTorso != null &&
+            baseTorso > 0.12f &&
+            currentTorsoSpanNorm <= baseTorso * FRONTAL_RUKU_SPAN_RETENTION_MAX
+
+        val baseNoseH = baselineNoseAboveAnkleNorm
+        val noseDroppedBy40To55Pct = currentNoseAboveAnkleNorm != null &&
+            baseNoseH != null &&
+            baseNoseH > 0.25f &&
+            (currentNoseAboveAnkleNorm / baseNoseH) in FRONTAL_RUKU_HEIGHT_MIN_RATIO..FRONTAL_RUKU_HEIGHT_MAX_RATIO
+
+        val baseShoulderH = baselineShoulderAboveAnkleNorm
+        val shoulderDroppedBy40To55Pct = currentShoulderAboveAnkleNorm != null &&
+            baseShoulderH != null &&
+            baseShoulderH > 0.20f &&
+            (currentShoulderAboveAnkleNorm / baseShoulderH) in FRONTAL_RUKU_HEIGHT_MIN_RATIO..FRONTAL_RUKU_HEIGHT_MAX_RATIO
+
+        if (shoulderApproachesHip || noseDroppedBy40To55Pct || shoulderDroppedBy40To55Pct) {
+            return true
+        }
+
+        // 2. Baseline-free frontal fallback when user enters frame already bent in Ruku
+        if (avgAnkleNormY != null && currentTorsoSpanNorm != null) {
+            val legSpan = (avgAnkleNormY - avgHipNormY).coerceAtLeast(0f)
+            if (legSpan >= 0.22f && currentTorsoSpanNorm <= legSpan * 0.42f && avgShoulderNormY <= avgHipNormY + 0.08f) {
+                return true
+            }
+        }
+        return false
+    }
+
     private fun classifyRawPose(
         hasTorso: Boolean,
+        hasLegs: Boolean,
         torsoAngle: Float,
         kneeAngle: Float,
         headHeightRatio: Float,
         noseNormalizedY: Float,
+        shoulderNormalizedY: Float,
+        hipNormalizedY: Float,
         shoulderY: Float?,
         hipY: Float?,
-        wristY: Float?
+        wristY: Float?,
+        isFrontalRuku: Boolean,
+        isHeadTurnedForSalam: Boolean
     ): PrayerPose {
         if (!hasTorso) return PrayerPose.UNKNOWN
 
-        // 1. Sajda check: low head height relative to ankle & bent knees
+        // 1. Sajda check (side-view OR frontal view where nose & shoulders drop to bottom Y > 0.75 + knees bent)
         if (headHeightRatio < 0.20f && kneeAngle in 1f..68f) {
             return PrayerPose.SAJDA
         }
-        // Fallback Sajda when knees occluded by loose garments: nose is very low in frame
+        if (noseNormalizedY > FRONTAL_SAJDA_NOSE_Y_MIN &&
+            shoulderNormalizedY > FRONTAL_SAJDA_SHOULDER_Y_MIN &&
+            (kneeAngle in 1f..130f || !hasLegs)
+        ) {
+            return PrayerPose.SAJDA
+        }
         if (noseNormalizedY > 0.72f && torsoAngle in 1f..95f) {
             return PrayerPose.SAJDA
         }
 
-        // 2. Qada / Sitting check: torso upright relative to thigh (70..115), knees deeply bent (<58)
-        if (torsoAngle in 68f..118f && kneeAngle in 1f..58f && noseNormalizedY < 0.70f) {
+        // 2. Salam check while seated (head turned right/left via nose-ear horizontal asymmetry)
+        val isSeatedPosture = (kneeAngle in 1f..115f && noseNormalizedY < 0.74f) ||
+            (!hasLegs && hipNormalizedY >= 0.58f && noseNormalizedY < 0.74f)
+        if (isSeatedPosture && isHeadTurnedForSalam) {
+            return PrayerPose.SALAM
+        }
+
+        // 3. Qada / Sitting check: side-view (torso 65..120, knee < 62) OR frontal foreshortened Qa'da
+        val isFrontalQada = hipNormalizedY >= 0.60f &&
+            noseNormalizedY < 0.68f &&
+            torsoAngle in 65f..148f &&
+            kneeAngle in 1f..115f
+        if ((torsoAngle in 65f..120f && kneeAngle in 1f..62f && noseNormalizedY < 0.72f) || isFrontalQada) {
             return PrayerPose.QADA
         }
 
-        // 3. Ruku check: torso bent forward (55..125), knees extended (>= 140 to accommodate Hanafi female posture)
-        if (torsoAngle in 55f..125f && kneeAngle >= 140f) {
+        // 4. Ruku check: 3D spatial torso bend OR frontal height-drop Ruku while knees remain straight
+        if ((torsoAngle in 52f..125f && kneeAngle >= 135f) || isFrontalRuku) {
             return PrayerPose.RUKU
         }
 
-        // 4. Upright standing: Takbir vs Qiyom
-        if (torsoAngle >= 155f && kneeAngle >= 155f) {
+        // 5. Upright standing: Takbir vs Qiyom
+        if (torsoAngle >= 150f && kneeAngle >= 150f) {
             if (wristY != null && shoulderY != null && hipY != null) {
-                // In image coords, smaller Y means higher up
                 val earOrShoulderZone = shoulderY + (hipY - shoulderY) * 0.15f
                 if (wristY <= earOrShoulderZone) {
                     return PrayerPose.TAKBIR
@@ -249,6 +438,24 @@ class PrayerPoseAnalyzer(
         }
 
         return PrayerPose.UNKNOWN
+    }
+
+    private fun averageNormalizedY(
+        a: ExtractedPoseLandmark?,
+        b: ExtractedPoseLandmark?
+    ): Float? {
+        val aOk = isReliable(a)
+        val bOk = isReliable(b)
+        return when {
+            aOk && bOk -> (a!!.normalizedY + b!!.normalizedY) / 2f
+            aOk -> a!!.normalizedY
+            bOk -> b!!.normalizedY
+            else -> null
+        }
+    }
+
+    private fun blendBaseline(current: Float?, sample: Float): Float {
+        return if (current == null) sample else (current * 0.85f + sample * 0.15f)
     }
 
     private fun computeSideAverageAngle(
@@ -291,22 +498,7 @@ class PrayerPoseAnalyzer(
         firstPoint: ExtractedPoseLandmark,
         midPoint: ExtractedPoseLandmark,
         lastPoint: ExtractedPoseLandmark
-    ): Float {
-        val result = Math.toDegrees(
-            atan2(
-                (lastPoint.y - midPoint.y).toDouble(),
-                (lastPoint.x - midPoint.x).toDouble()
-            ) - atan2(
-                (firstPoint.y - midPoint.y).toDouble(),
-                (firstPoint.x - midPoint.x).toDouble()
-            )
-        )
-        var angle = abs(result)
-        if (angle > 180.0) {
-            angle = 360.0 - angle
-        }
-        return angle.toFloat()
-    }
+    ): Float = calculateAngle3D(firstPoint, midPoint, lastPoint)
 
     /**
      * Fast Y-plane luminance estimation (0..255). Samples every 16th pixel for <0.5ms latency.

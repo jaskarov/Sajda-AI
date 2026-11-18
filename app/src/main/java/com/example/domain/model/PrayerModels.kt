@@ -92,6 +92,13 @@ enum class PrayerTrack(
         lText("3 rakat vojib • Qunut duosi bilan", "3 ракат вожиб • Қунут дуоси билан")
     );
 
+    fun nextContinuationTrack(): PrayerTrack? = when (this) {
+        BOMDOD_SUNNAT -> BOMDOD_FARZ
+        PESHIN_SUNNAT_1 -> PESHIN_FARZ
+        XUFTON_FARZ -> VITR_VOJIB
+        else -> null
+    }
+
     companion object {
         fun fromId(id: String?): PrayerTrack =
             entries.firstOrNull { it.id == id } ?: PESHIN_FARZ
@@ -180,7 +187,8 @@ data class PrayerStep(
     val ttsPrompt: String,
     val minHoldDurationMs: Long,
     val requiresPoseTransition: Boolean = true,
-    val audioAssetId: String = ""
+    val audioAssetId: String = "",
+    val postRecitationCue: LText? = null
 ) {
     fun getWords(script: TextScript): List<String> {
         val text = when (script) {

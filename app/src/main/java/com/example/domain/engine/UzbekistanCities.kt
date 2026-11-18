@@ -2,13 +2,17 @@ package com.example.domain.engine
 
 import com.example.domain.model.UzbekCity
 import com.example.domain.model.lText
+import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 object UzbekistanCities {
     const val MAKKAH_LAT = 21.4225
     const val MAKKAH_LON = 39.8262
+    private const val EARTH_RADIUS_KM = 6371.0
 
     val all: List<UzbekCity> = listOf(
         UzbekCity(
@@ -132,5 +136,18 @@ object UzbekistanCities {
         val x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dLon)
         val bearing = Math.toDegrees(atan2(y, x))
         return (bearing + 360.0) % 360.0
+    }
+
+    fun calculateDistanceToKaabaKm(latitude: Double, longitude: Double): Int {
+        val lat1 = Math.toRadians(latitude)
+        val lon1 = Math.toRadians(longitude)
+        val lat2 = Math.toRadians(MAKKAH_LAT)
+        val lon2 = Math.toRadians(MAKKAH_LON)
+        val dLat = lat2 - lat1
+        val dLon = lon2 - lon1
+        val a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2)
+        val c = 2 * asin(sqrt(a.coerceIn(0.0, 1.0)))
+        return (EARTH_RADIUS_KM * c).roundToInt()
     }
 }

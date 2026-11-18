@@ -38,11 +38,14 @@ data class PrayerCoachUiState(
     val isPaused: Boolean = false,
     val isCompleted: Boolean = false,
     val stepAudioDone: Boolean = false,
+    val isPostRecitationCueActive: Boolean = false,
     val playbackProgress: Float = 0f,
     val audioStatus: AudioCoachStatus = AudioCoachStatus.Idle,
     val audioOnlyRemainingSec: Int = 0,
     val calibrationConfirmedOnce: Boolean = false,
-    val totalSessionSeconds: Int = 0
+    val totalSessionSeconds: Int = 0,
+    val pendingNextTrack: PrayerTrack? = null,
+    val nextTrackCountdownSec: Int = 0
 ) {
     val currentStep: PrayerStep? get() = steps.getOrNull(currentStepIndex)
 }
@@ -60,6 +63,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     val uiState: StateFlow<PrayerCoachUiState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
+    private var nextTrackCountdownJob: Job? = null
     private var sessionStartMillis: Long = 0L
     private var stepEnteredMillis: Long = 0L
     private var activeSessionStarted: Boolean = false
@@ -68,7 +72,11 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     init {
         viewModelScope.launch {
             audioCoach.playbackProgress.collect { progress ->
-                _uiState.update { it.copy(playbackProgress = progress) }
+                _uiState.update { state ->
+                    // Keep progress pinned at 1f while post-recitation cue speaks after surah
+                    if (state.isPostRecitationCueActive || state.stepAudioDone) state
+                    else state.copy(playbackProgress = progress)
+                }
             }
         }
         viewModelScope.launch {
@@ -79,6 +87,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun prepareTrack(track: PrayerTrack, initialMode: CoachMode = CoachMode.CAMERA_AI) {
+        nextTrackCountdownJob?.cancel()
         val currentGender = _uiState.value.settings.gender
         val initialSteps = sequenceEngine.buildSteps(track, currentGender)
         _uiState.update {
@@ -90,7 +99,10 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 isCompleted = false,
                 isPaused = false,
                 stepAudioDone = false,
-                calibrationConfirmedOnce = false
+                isPostRecitationCueActive = false,
+                calibrationConfirmedOnce = false,
+                pendingNextTrack = null,
+                nextTrackCountdownSec = 0
             )
         }
         viewModelScope.launch {
@@ -119,6 +131,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         mode: CoachMode,
         fallbackReason: FallbackReason = FallbackReason.NONE
     ) {
+        nextTrackCountdownJob?.cancel()
         val currentGender = _uiState.value.settings.gender
         val steps = sequenceEngine.buildSteps(track, currentGender)
         activeSessionStarted = true
@@ -133,7 +146,10 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 currentStepIndex = 0,
                 isPaused = false,
                 isCompleted = false,
-                stepAudioDone = false
+                stepAudioDone = false,
+                isPostRecitationCueActive = false,
+                pendingNextTrack = null,
+                nextTrackCountdownSec = 0
             )
         }
         enterStep(0)
@@ -146,6 +162,27 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             } else {
                 _uiState.update { it.copy(settings = settings) }
             }
+        }
+    }
+
+    fun startNextContinuationTrack() {
+        nextTrackCountdownJob?.cancel()
+        val state = _uiState.value
+        val nextTrack = state.pendingNextTrack ?: return
+        startActivePrayerSession(
+            track = nextTrack,
+            mode = state.mode,
+            fallbackReason = state.fallbackReason
+        )
+    }
+
+    fun cancelContinuationCountdown() {
+        nextTrackCountdownJob?.cancel()
+        _uiState.update {
+            it.copy(
+                pendingNextTrack = null,
+                nextTrackCountdownSec = 0
+            )
         }
     }
 
@@ -167,7 +204,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
 
-        // Camera AI auto-advance when pose matches expected step pose & audio finished
+        // Camera AI auto-advance when pose matches expected step pose & audio (+ post cue) finished
         if (state.mode == CoachMode.CAMERA_AI) {
             val step = state.currentStep ?: return
             val elapsedInStep = SystemClock.elapsedRealtime() - stepEnteredMillis
@@ -240,6 +277,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             it.copy(
                 currentStepIndex = index,
                 stepAudioDone = false,
+                isPostRecitationCueActive = false,
                 playbackProgress = 0f,
                 audioOnlyRemainingSec = (step.minHoldDurationMs / 1000L).toInt().coerceAtLeast(3)
             )
@@ -252,20 +290,58 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             speed = state.settings.voiceSpeed,
             audioAssetId = step.audioAssetId,
             onCompleted = {
-                _uiState.update { it.copy(stepAudioDone = true) }
-                // If Audio-Only mode and timer already expired, advance automatically
-                val latest = _uiState.value
-                if (latest.mode == CoachMode.AUDIO_ONLY &&
-                    !latest.isPaused &&
-                    latest.audioOnlyRemainingSec <= 0
-                ) {
-                    advanceToNextStep()
-                }
+                handlePrimaryAudioCompleted(index, step)
             }
         )
 
         if (_uiState.value.mode == CoachMode.AUDIO_ONLY) {
             startAudioOnlyStepTimer()
+        }
+    }
+
+    private fun handlePrimaryAudioCompleted(stepIndex: Int, step: PrayerStep) {
+        val latest = _uiState.value
+        if (latest.currentStepIndex != stepIndex || latest.isCompleted) return
+
+        val cue = step.postRecitationCue?.get(latest.settings.script)
+        if (!cue.isNullOrBlank()) {
+            _uiState.update {
+                it.copy(
+                    playbackProgress = 1f,
+                    isPostRecitationCueActive = true
+                )
+            }
+            audioCoach.speak(
+                text = cue,
+                gender = latest.settings.gender,
+                preferOfflineMp3 = false,
+                speed = latest.settings.voiceSpeed,
+                audioAssetId = "",
+                onCompleted = {
+                    finalizeStepAudio(stepIndex)
+                }
+            )
+        } else {
+            finalizeStepAudio(stepIndex)
+        }
+    }
+
+    private fun finalizeStepAudio(stepIndex: Int) {
+        val latest = _uiState.value
+        if (latest.currentStepIndex != stepIndex || latest.isCompleted) return
+        _uiState.update {
+            it.copy(
+                stepAudioDone = true,
+                isPostRecitationCueActive = false,
+                playbackProgress = 1f
+            )
+        }
+        val updated = _uiState.value
+        if (updated.mode == CoachMode.AUDIO_ONLY &&
+            !updated.isPaused &&
+            updated.audioOnlyRemainingSec <= 0
+        ) {
+            advanceToNextStep()
         }
     }
 
@@ -293,23 +369,27 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         return when (expected) {
             PrayerPose.QAVMA -> detected == PrayerPose.QIYOM || detected == PrayerPose.QAVMA
             PrayerPose.JALSA -> detected == PrayerPose.QADA || detected == PrayerPose.JALSA
-            PrayerPose.SALAM -> detected == PrayerPose.QADA || detected == PrayerPose.SALAM
+            PrayerPose.SALAM -> detected == PrayerPose.SALAM
             else -> detected == expected
         }
     }
 
     private fun completePrayerSession() {
         timerJob?.cancel()
+        nextTrackCountdownJob?.cancel()
         audioCoach.stop()
         val state = _uiState.value
         val durationSec = ((SystemClock.elapsedRealtime() - sessionStartMillis) / 1000L)
             .toInt()
             .coerceAtLeast(10)
+        val nextTrack = state.track.nextContinuationTrack()
 
         _uiState.update {
             it.copy(
                 isCompleted = true,
-                totalSessionSeconds = durationSec
+                totalSessionSeconds = durationSec,
+                pendingNextTrack = nextTrack,
+                nextTrackCountdownSec = if (nextTrack != null) 5 else 0
             )
         }
 
@@ -323,10 +403,37 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 durationSeconds = durationSec
             )
         }
+
+        if (nextTrack != null) {
+            val announcement = if (nextTrack == PrayerTrack.VITR_VOJIB) {
+                "Xufton farz namozi tugadi. 5 soniyada Vitr namozi boshlanadi."
+            } else {
+                "Sunnat namozi tugadi. 5 soniyada Farz namozi boshlanadi."
+            }
+            audioCoach.speak(
+                text = announcement,
+                gender = state.settings.gender,
+                preferOfflineMp3 = false,
+                speed = state.settings.voiceSpeed
+            )
+            nextTrackCountdownJob = viewModelScope.launch {
+                for (sec in 5 downTo 1) {
+                    if (!isActive || !_uiState.value.isCompleted || _uiState.value.pendingNextTrack == null) {
+                        return@launch
+                    }
+                    _uiState.update { it.copy(nextTrackCountdownSec = sec) }
+                    delay(1000L)
+                }
+                if (isActive && _uiState.value.isCompleted && _uiState.value.pendingNextTrack != null) {
+                    startNextContinuationTrack()
+                }
+            }
+        }
     }
 
     fun cleanup() {
         timerJob?.cancel()
+        nextTrackCountdownJob?.cancel()
         audioCoach.release()
     }
 

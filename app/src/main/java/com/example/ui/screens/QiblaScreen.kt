@@ -33,9 +33,11 @@ import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -70,13 +72,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.lText
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.theme.PoseWarningAmber
 import com.example.ui.theme.SaffronGold
-import com.example.ui.viewmodel.MainUiState
 import com.example.ui.viewmodel.CompassUiState
+import com.example.ui.viewmodel.MainUiState
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -98,12 +101,20 @@ fun QiblaScreen(
     val azimuth = compassState.compassAzimuth
     val displayQiblaDeg = ((qiblaBearing.roundToInt() % 360) + 360) % 360
     val displayAzimuthDeg = ((azimuth.roundToInt() % 360) + 360) % 360
+    val kaabaDistanceKm = remember(schedule.city.latitude, schedule.city.longitude) {
+        UzbekistanCities.calculateDistanceToKaabaKm(
+            schedule.city.latitude,
+            schedule.city.longitude
+        )
+    }
 
     var locationMessage by remember { mutableStateOf<String?>(null) }
 
     val locationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
             val detected = onDetectNearestCity()
             locationMessage = if (detected != null) {
@@ -168,6 +179,16 @@ fun QiblaScreen(
             stiffness = Spring.StiffnessMediumLow
         ),
         label = "qibla_rotation"
+    )
+    val animatedTiltX by animateFloatAsState(
+        targetValue = compassState.tiltX.coerceIn(-1f, 1f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "tilt_x"
+    )
+    val animatedTiltY by animateFloatAsState(
+        targetValue = compassState.tiltY.coerceIn(-1f, 1f),
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "tilt_y"
     )
 
     val turnGuidance = remember(diff, isAligned, script) {
@@ -270,6 +291,38 @@ fun QiblaScreen(
                 }
             }
 
+            if (!compassState.isLevel) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = PoseWarningAmber.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, PoseWarningAmber.copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("qibla_level_hint_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ScreenLockRotation,
+                            contentDescription = null,
+                            tint = PoseWarningAmber,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = lText(
+                                "Aniq natija uchun telefonni yer bilan tekis (gorizontal) tuting",
+                                "Аниқ натижа учун телефонни ер билан текис (горизонтал) тутинг"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
             // Compass Dial Canvas
             Box(
                 modifier = Modifier
@@ -318,12 +371,20 @@ fun QiblaScreen(
                         center = center
                     )
 
-                    // Inner crosshairs & concentric guide ring
+                    // Inner crosshairs, concentric guide ring & accelerometer bubble level target
                     drawCircle(
                         color = outlineColor.copy(alpha = 0.25f),
                         radius = outerRadius * 0.62f,
                         center = center,
                         style = Stroke(width = 2f)
+                    )
+                    val levelZoneRadius = outerRadius * 0.24f
+                    val levelColor = if (compassState.isLevel) PoseMatchedGreen else PoseWarningAmber
+                    drawCircle(
+                        color = levelColor.copy(alpha = 0.28f),
+                        radius = levelZoneRadius,
+                        center = center,
+                        style = Stroke(width = 2.5f)
                     )
                     drawLine(
                         color = outlineColor.copy(alpha = 0.2f),
@@ -336,6 +397,20 @@ fun QiblaScreen(
                         start = Offset(center.x, center.y - outerRadius * 0.52f),
                         end = Offset(center.x, center.y + outerRadius * 0.52f),
                         strokeWidth = 2f
+                    )
+                    val bubbleCenter = Offset(
+                        x = center.x + animatedTiltX * (levelZoneRadius * 0.85f),
+                        y = center.y + animatedTiltY * (levelZoneRadius * 0.85f)
+                    )
+                    drawCircle(
+                        color = levelColor.copy(alpha = 0.26f),
+                        radius = 12f,
+                        center = bubbleCenter
+                    )
+                    drawCircle(
+                        color = levelColor.copy(alpha = 0.78f),
+                        radius = 6f,
+                        center = bubbleCenter
                     )
 
                     // Outer bezel ring
@@ -509,38 +584,97 @@ fun QiblaScreen(
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = lText("Qibla burchagi", "Қибла бурчаги").get(script),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "$displayQiblaDeg°",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = lText("Qibla burchagi", "Қибла бурчаги").get(script),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "$displayQiblaDeg°",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = lText("Joriy yo‘nalish", "Жорий йўналиш").get(script),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "$displayAzimuthDeg°",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                modifier = Modifier.testTag("compass_azimuth_value")
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = lText("Ka’bagacha", "Каъбагача").get(script),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "$kaabaDistanceKm km",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                color = SaffronGold,
+                                modifier = Modifier.testTag("qibla_kaaba_distance")
+                            )
+                        }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+
+                    val accuracyLabel = when (compassState.compassAccuracy) {
+                        SensorManager.SENSOR_STATUS_ACCURACY_HIGH ->
+                            lText("Yuqori", "Юқори").get(script)
+                        SensorManager.SENSOR_STATUS_ACCURACY_MEDIUM ->
+                            lText("O‘rta", "Ўрта").get(script)
+                        else -> lText("Past", "Паст").get(script)
+                    }
+                    val levelLabel = if (compassState.isLevel) {
+                        lText("Tekis ✓", "Текис ✓").get(script)
+                    } else {
+                        lText(
+                            "${compassState.tiltDegrees.roundToInt()}° egilgan",
+                            "${compassState.tiltDegrees.roundToInt()}° эгилган"
+                        ).get(script)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = lText("Joriy yo‘nalish", "Жорий йўналиш").get(script),
-                            style = MaterialTheme.typography.labelMedium,
+                            text = lText(
+                                "Magnetometr + Akselerometr • $accuracyLabel",
+                                "Магнитометр + Акселерометр • $accuracyLabel"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = "$displayAzimuthDeg°",
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp,
-                            modifier = Modifier.testTag("compass_azimuth_value")
+                            text = levelLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (compassState.isLevel) PoseMatchedGreen else PoseWarningAmber
                         )
                     }
                 }
@@ -580,11 +714,15 @@ fun QiblaScreen(
 
             FilledTonalButton(
                 onClick = {
-                    val granted = ContextCompat.checkSelfPermission(
+                    val fineGranted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val coarseGranted = ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.ACCESS_COARSE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
-                    if (granted) {
+                    if (fineGranted || coarseGranted) {
                         val detected = onDetectNearestCity()
                         locationMessage = if (detected != null) {
                             lText("Shahar yangilandi: $detected", "Шаҳар янгиланди: $detected")
@@ -593,7 +731,12 @@ fun QiblaScreen(
                             lText("GPS signali topilmadi", "GPS сигнали топилмади").get(script)
                         }
                     } else {
-                        locationLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                        locationLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
                     }
                 },
                 modifier = Modifier

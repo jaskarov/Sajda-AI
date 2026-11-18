@@ -54,7 +54,7 @@ class PrayerCalendarRepositoryTest {
 
     @Test
     fun getTodayAndTomorrow_drivesUseCaseWithExactDbTimes() = runTest {
-        val nov15Night = Calendar.getInstance().apply {
+        val nov15Night = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent")).apply {
             set(2026, Calendar.NOVEMBER, 15, 22, 0, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
