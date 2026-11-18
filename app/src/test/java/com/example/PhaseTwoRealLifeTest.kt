@@ -358,7 +358,7 @@ class PhaseTwoRealLifeTest {
     }
 
     @Test
-    fun settingsScreen_andBackupManager_roundTripAutoVolumeAndAcousticChime() = runBlocking {
+    fun settingsScreen_andBackupManager_roundTripAutoVolumeAndAcousticChime() {
         var autoBoost by mutableStateOf(true)
         var chimeEnabled by mutableStateOf(true)
 
@@ -391,22 +391,24 @@ class PhaseTwoRealLifeTest {
         assertFalse(autoBoost)
         assertFalse(chimeEnabled)
 
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        val prefs = UserPreferencesRepository(app)
-        val db = SajdaDatabase.getInstance(app)
-        val manager = SajdaBackupManager(
-            prefsRepo = prefs,
-            historyRepo = PrayerHistoryRepository(db.prayerHistoryDao(), db.dailyPrayerProgressDao()),
-            qazoRepo = QazoPrayerRepository(db.qazoPrayerDao())
-        )
-        prefs.setAutoBoostPrayerVolume(false)
-        prefs.setAcousticChimeEnabled(false)
-        val exported = manager.exportToJson()
-        prefs.setAutoBoostPrayerVolume(true)
-        prefs.setAcousticChimeEnabled(true)
-        manager.importFromJson(exported)
-        val restored = prefs.settingsFlow.first()
-        assertFalse(restored.autoBoostPrayerVolume)
-        assertFalse(restored.acousticChimeEnabled)
+        runBlocking(Dispatchers.IO) {
+            val app = ApplicationProvider.getApplicationContext<Application>()
+            val prefs = UserPreferencesRepository(app)
+            val db = SajdaDatabase.getInstance(app)
+            val manager = SajdaBackupManager(
+                prefsRepo = prefs,
+                historyRepo = PrayerHistoryRepository(db.prayerHistoryDao(), db.dailyPrayerProgressDao()),
+                qazoRepo = QazoPrayerRepository(db.qazoPrayerDao())
+            )
+            prefs.setAutoBoostPrayerVolume(false)
+            prefs.setAcousticChimeEnabled(false)
+            val exported = manager.exportToJson()
+            prefs.setAutoBoostPrayerVolume(true)
+            prefs.setAcousticChimeEnabled(true)
+            manager.importFromJson(exported)
+            val restored = prefs.settingsFlow.first()
+            assertFalse(restored.autoBoostPrayerVolume)
+            assertFalse(restored.acousticChimeEnabled)
+        }
     }
 }
