@@ -1,27 +1,18 @@
 package com.example.vision
 
-import android.os.SystemClock
-import android.util.Log
-import androidx.annotation.OptIn
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import com.example.domain.model.NormalizedLandmark
 import com.example.domain.model.PoseAnalysisSnapshot
 import com.example.domain.model.PrayerPose
 import com.example.domain.model.lText
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.pose.Pose
-import com.google.mlkit.vision.pose.PoseDetection
-import com.google.mlkit.vision.pose.PoseDetector
 import com.google.mlkit.vision.pose.PoseLandmark
-import com.google.mlkit.vision.pose.accurate.AccuratePoseDetectorOptions
 import java.nio.ByteBuffer
 import kotlin.math.abs
 import kotlin.math.atan2
 
 /**
- * Real-time CameraX ImageAnalysis.Analyzer backed by ML Kit Pose Detection (Accurate).
+ * Real-time CameraX ImageAnalysis.Analyzer backed by [PoseDetectionAnalyzerHelper]
+ * and ML Kit Pose Detection (Accurate).
  *
  * Implements:
  * - Zero-Storage Policy: frames stay in RAM and imageProxy.close() is always invoked.
@@ -38,118 +29,69 @@ class PrayerPoseAnalyzer(
 ) : ImageAnalysis.Analyzer {
 
     companion object {
-        private const val TAG = "PrayerPoseAnalyzer"
         private const val MIN_FRAME_INTERVAL_MS = 66L // ~15 FPS
         private const val DEBOUNCE_DURATION_MS = 400L
         private const val DARK_FRAMES_TRIGGER_COUNT = 25 // ~1.7-2.5s of dark frames
         private const val MIN_CONFIDENCE = 0.45f
     }
 
-    private val detector: PoseDetector by lazy {
-        val options = AccuratePoseDetectorOptions.Builder()
-            .setDetectorMode(AccuratePoseDetectorOptions.STREAM_MODE)
-            .build()
-        PoseDetection.getClient(options)
-    }
+    @Volatile
+    private var latestLuminance: Float = 128f
 
     @Volatile
-    private var lastProcessedTimeMs = 0L
-
-    @Volatile
-    private var isBusy = false
+    private var latestIsRoomTooDark: Boolean = false
 
     private var candidatePose: PrayerPose = PrayerPose.UNKNOWN
     private var candidateSinceMs: Long = 0L
     private var confirmedPose: PrayerPose = PrayerPose.UNKNOWN
     private var consecutiveDarkFrames = 0
 
-    @OptIn(ExperimentalGetImage::class)
+    private val poseHelper = PoseDetectionAnalyzerHelper(
+        minFrameIntervalMs = MIN_FRAME_INTERVAL_MS,
+        onPreInspectFrame = { imageProxy ->
+            val luminance = estimateLuminance(imageProxy)
+            if (luminance < darkLuminanceThreshold) {
+                consecutiveDarkFrames++
+            } else {
+                consecutiveDarkFrames = 0
+            }
+            latestLuminance = luminance
+            latestIsRoomTooDark = consecutiveDarkFrames >= DARK_FRAMES_TRIGGER_COUNT
+        },
+        onLandmarksExtracted = { frameLandmarks ->
+            val snapshot = evaluatePose(
+                frameLandmarks = frameLandmarks,
+                luminance = latestLuminance,
+                isRoomTooDark = latestIsRoomTooDark
+            )
+            onPoseResult(snapshot)
+        }
+    )
+
     override fun analyze(imageProxy: ImageProxy) {
-        val now = SystemClock.elapsedRealtime()
-        if (isBusy || (now - lastProcessedTimeMs) < MIN_FRAME_INTERVAL_MS) {
-            imageProxy.close()
-            return
-        }
-
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
-            imageProxy.close()
-            return
-        }
-
-        isBusy = true
-        lastProcessedTimeMs = now
-
-        val luminance = estimateLuminance(imageProxy)
-        if (luminance < darkLuminanceThreshold) {
-            consecutiveDarkFrames++
-        } else {
-            consecutiveDarkFrames = 0
-        }
-        val isRoomTooDark = consecutiveDarkFrames >= DARK_FRAMES_TRIGGER_COUNT
-
-        val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-        val uprightWidth = if (rotationDegrees == 90 || rotationDegrees == 270) {
-            imageProxy.height
-        } else {
-            imageProxy.width
-        }
-        val uprightHeight = if (rotationDegrees == 90 || rotationDegrees == 270) {
-            imageProxy.width
-        } else {
-            imageProxy.height
-        }
-
-        val inputImage = InputImage.fromMediaImage(mediaImage, rotationDegrees)
-
-        detector.process(inputImage)
-            .addOnSuccessListener { pose ->
-                val snapshot = evaluatePose(
-                    pose = pose,
-                    frameWidth = uprightWidth.coerceAtLeast(1),
-                    frameHeight = uprightHeight.coerceAtLeast(1),
-                    luminance = luminance,
-                    isRoomTooDark = isRoomTooDark,
-                    timestampMs = SystemClock.elapsedRealtime()
-                )
-                onPoseResult(snapshot)
-            }
-            .addOnFailureListener { error ->
-                Log.e(TAG, "ML Kit pose detection error", error)
-            }
-            .addOnCompleteListener {
-                isBusy = false
-                imageProxy.close()
-            }
+        poseHelper.analyze(imageProxy)
     }
 
     fun close() {
-        try {
-            detector.close()
-        } catch (e: Exception) {
-            Log.w(TAG, "Error closing pose detector", e)
-        }
+        poseHelper.close()
     }
 
     private fun evaluatePose(
-        pose: Pose,
-        frameWidth: Int,
-        frameHeight: Int,
+        frameLandmarks: PoseFrameLandmarks,
         luminance: Float,
-        isRoomTooDark: Boolean,
-        timestampMs: Long
+        isRoomTooDark: Boolean
     ): PoseAnalysisSnapshot {
-        val nose = pose.getPoseLandmark(PoseLandmark.NOSE)
-        val lShoulder = pose.getPoseLandmark(PoseLandmark.LEFT_SHOULDER)
-        val rShoulder = pose.getPoseLandmark(PoseLandmark.RIGHT_SHOULDER)
-        val lHip = pose.getPoseLandmark(PoseLandmark.LEFT_HIP)
-        val rHip = pose.getPoseLandmark(PoseLandmark.RIGHT_HIP)
-        val lKnee = pose.getPoseLandmark(PoseLandmark.LEFT_KNEE)
-        val rKnee = pose.getPoseLandmark(PoseLandmark.RIGHT_KNEE)
-        val lAnkle = pose.getPoseLandmark(PoseLandmark.LEFT_ANKLE)
-        val rAnkle = pose.getPoseLandmark(PoseLandmark.RIGHT_ANKLE)
-        val lWrist = pose.getPoseLandmark(PoseLandmark.LEFT_WRIST)
-        val rWrist = pose.getPoseLandmark(PoseLandmark.RIGHT_WRIST)
+        val nose = frameLandmarks.landmark(PoseLandmark.NOSE)
+        val lShoulder = frameLandmarks.landmark(PoseLandmark.LEFT_SHOULDER)
+        val rShoulder = frameLandmarks.landmark(PoseLandmark.RIGHT_SHOULDER)
+        val lHip = frameLandmarks.landmark(PoseLandmark.LEFT_HIP)
+        val rHip = frameLandmarks.landmark(PoseLandmark.RIGHT_HIP)
+        val lKnee = frameLandmarks.landmark(PoseLandmark.LEFT_KNEE)
+        val rKnee = frameLandmarks.landmark(PoseLandmark.RIGHT_KNEE)
+        val lAnkle = frameLandmarks.landmark(PoseLandmark.LEFT_ANKLE)
+        val rAnkle = frameLandmarks.landmark(PoseLandmark.RIGHT_ANKLE)
+        val lWrist = frameLandmarks.landmark(PoseLandmark.LEFT_WRIST)
+        val rWrist = frameLandmarks.landmark(PoseLandmark.RIGHT_WRIST)
 
         val shoulder = pickBestLandmark(lShoulder, rShoulder)
         val hip = pickBestLandmark(lHip, rHip)
@@ -204,15 +146,16 @@ class PrayerPoseAnalyzer(
             calculateAngle(hip, knee, ankle)
         } else 0f
 
+        val frameHeight = frameLandmarks.frameHeight.coerceAtLeast(1)
         val headHeightRatio = if (nose != null && ankle != null) {
-            abs(ankle.position.y - nose.position.y) / frameHeight.toFloat()
+            abs(ankle.y - nose.y) / frameHeight.toFloat()
         } else if (nose != null && hip != null) {
-            abs(hip.position.y - nose.position.y) / frameHeight.toFloat()
+            abs(hip.y - nose.y) / frameHeight.toFloat()
         } else {
             0.5f
         }
 
-        val noseNormalizedY = if (nose != null) nose.position.y / frameHeight.toFloat() else 0.5f
+        val noseNormalizedY = nose?.normalizedY ?: 0.5f
 
         val rawPose = classifyRawPose(
             hasTorso = hasTorso,
@@ -220,30 +163,21 @@ class PrayerPoseAnalyzer(
             kneeAngle = kneeAngle,
             headHeightRatio = headHeightRatio,
             noseNormalizedY = noseNormalizedY,
-            shoulderY = shoulder?.position?.y,
-            hipY = hip?.position?.y,
-            wristY = wrist?.position?.y
+            shoulderY = shoulder?.y,
+            hipY = hip?.y,
+            wristY = wrist?.y
         )
 
         // 400ms Debounce state filter
         if (rawPose != PrayerPose.UNKNOWN) {
             if (rawPose == candidatePose) {
-                if ((timestampMs - candidateSinceMs) >= DEBOUNCE_DURATION_MS) {
+                if ((frameLandmarks.timestampMs - candidateSinceMs) >= DEBOUNCE_DURATION_MS) {
                     confirmedPose = rawPose
                 }
             } else {
                 candidatePose = rawPose
-                candidateSinceMs = timestampMs
+                candidateSinceMs = frameLandmarks.timestampMs
             }
-        }
-
-        val normalizedLandmarks = pose.allPoseLandmarks.map { lm ->
-            NormalizedLandmark(
-                type = lm.landmarkType,
-                x = (lm.position.x / frameWidth.toFloat()).coerceIn(0f, 1f),
-                y = (lm.position.y / frameHeight.toFloat()).coerceIn(0f, 1f),
-                inFrameLikelihood = lm.inFrameLikelihood
-            )
         }
 
         return PoseAnalysisSnapshot(
@@ -256,9 +190,9 @@ class PrayerPoseAnalyzer(
             calibrationHint = calibrationHint,
             averageLuminance = luminance,
             isLowLight = isRoomTooDark,
-            landmarks = normalizedLandmarks,
-            imageWidth = frameWidth,
-            imageHeight = frameHeight,
+            landmarks = frameLandmarks.toNormalizedLandmarks(),
+            imageWidth = frameLandmarks.frameWidth,
+            imageHeight = frameLandmarks.frameHeight,
             isFrontCamera = isFrontCamera
         )
     }
@@ -318,12 +252,12 @@ class PrayerPoseAnalyzer(
     }
 
     private fun computeSideAverageAngle(
-        leftA: PoseLandmark?,
-        leftB: PoseLandmark?,
-        leftC: PoseLandmark?,
-        rightA: PoseLandmark?,
-        rightB: PoseLandmark?,
-        rightC: PoseLandmark?
+        leftA: ExtractedPoseLandmark?,
+        leftB: ExtractedPoseLandmark?,
+        leftC: ExtractedPoseLandmark?,
+        rightA: ExtractedPoseLandmark?,
+        rightB: ExtractedPoseLandmark?,
+        rightC: ExtractedPoseLandmark?
     ): Float? {
         val leftAngle = if (isReliable(leftA) && isReliable(leftB) && isReliable(leftC)) {
             calculateAngle(leftA!!, leftB!!, leftC!!)
@@ -341,27 +275,30 @@ class PrayerPoseAnalyzer(
         }
     }
 
-    private fun isReliable(lm: PoseLandmark?): Boolean =
+    private fun isReliable(lm: ExtractedPoseLandmark?): Boolean =
         lm != null && lm.inFrameLikelihood >= MIN_CONFIDENCE
 
-    private fun pickBestLandmark(a: PoseLandmark?, b: PoseLandmark?): PoseLandmark? {
+    private fun pickBestLandmark(
+        a: ExtractedPoseLandmark?,
+        b: ExtractedPoseLandmark?
+    ): ExtractedPoseLandmark? {
         if (a == null) return b
         if (b == null) return a
         return if (a.inFrameLikelihood >= b.inFrameLikelihood) a else b
     }
 
     fun calculateAngle(
-        firstPoint: PoseLandmark,
-        midPoint: PoseLandmark,
-        lastPoint: PoseLandmark
+        firstPoint: ExtractedPoseLandmark,
+        midPoint: ExtractedPoseLandmark,
+        lastPoint: ExtractedPoseLandmark
     ): Float {
         val result = Math.toDegrees(
             atan2(
-                (lastPoint.position.y - midPoint.position.y).toDouble(),
-                (lastPoint.position.x - midPoint.position.x).toDouble()
+                (lastPoint.y - midPoint.y).toDouble(),
+                (lastPoint.x - midPoint.x).toDouble()
             ) - atan2(
-                (firstPoint.position.y - midPoint.position.y).toDouble(),
-                (firstPoint.position.x - midPoint.position.x).toDouble()
+                (firstPoint.y - midPoint.y).toDouble(),
+                (firstPoint.x - midPoint.x).toDouble()
             )
         )
         var angle = abs(result)
