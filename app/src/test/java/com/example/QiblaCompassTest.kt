@@ -38,6 +38,17 @@ class QiblaCompassTest {
     }
 
     @Test
+    fun adaptiveAzimuthSmoothing_respondsQuicklyOnLargeTurnsAndDampensOnStill() {
+        // Large turn: 0 to 90 deg (delta 90 > 10) -> alpha 0.92f
+        val fastTurn = QiblaCompassSensor.smoothAzimuthAdaptive(currentDeg = 0f, targetDeg = 90f)
+        assertEquals(90f * 0.92f, fastTurn, 0.1f)
+
+        // Micro movement: 100 to 100.5 deg (delta 0.5 < 1) -> alpha 0.15f
+        val still = QiblaCompassSensor.smoothAzimuthAdaptive(currentDeg = 100f, targetDeg = 100.5f)
+        assertEquals(100f + 0.5f * 0.15f, still, 0.01f)
+    }
+
+    @Test
     fun lowPassFilter_blendsAccelerometerAndMagnetometerVectors() {
         val prev = floatArrayOf(0f, 0f, 9.8f)
         val raw = floatArrayOf(1f, 0f, 9.8f)

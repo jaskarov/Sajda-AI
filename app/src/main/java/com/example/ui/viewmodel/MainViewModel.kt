@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.hardware.GeomagneticField
 import android.hardware.SensorManager
+import android.location.Location
 import android.location.LocationManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -203,13 +204,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .distinctUntilChanged()
         .flatMapLatest { cityId ->
             val city = UzbekistanCities.findById(cityId)
+            val declination = GeomagneticField(
+                city.latitude.toFloat(),
+                city.longitude.toFloat(),
+                400f,
+                System.currentTimeMillis()
+            ).declination
             compassSensor.readingsFlow().map { reading ->
-                val declination = GeomagneticField(
-                    city.latitude.toFloat(),
-                    city.longitude.toFloat(),
-                    400f,
-                    System.currentTimeMillis()
-                ).declination
                 val trueAzimuth = ((reading.magneticAzimuthDegrees + declination) % 360f + 360f) % 360f
                 CompassUiState(
                     compassAzimuth = trueAzimuth,
@@ -370,16 +371,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun detectNearestCityFromCoarseLocation(): String? {
         val lm = getApplication<Application>()
             .getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val providers = listOf(
+
+        val providers = mutableListOf<String>()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            providers.add(LocationManager.FUSED_PROVIDER)
+        }
+        providers.addAll(listOf(
             LocationManager.GPS_PROVIDER,
             LocationManager.NETWORK_PROVIDER,
             LocationManager.PASSIVE_PROVIDER
-        )
-        val location = providers.firstNotNullOfOrNull { provider ->
-            runCatching { lm.getLastKnownLocation(provider) }.getOrNull()
-        } ?: return null
+        ))
 
-        val nearest = UzbekistanCities.findNearest(location.latitude, location.longitude)
+        var location: Location? = providers.firstNotNullOfOrNull { provider ->
+            runCatching { lm.getLastKnownLocation(provider) }.getOrNull()
+        }
+
+        // If no cached location is available, actively request single location with 1.8s timeout
+        if (location == null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val latch = java.util.concurrent.CountDownLatch(1)
+            val executor = java.util.concurrent.Executors.newSingleThreadExecutor()
+            try {
+                val activeProvider = if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    LocationManager.NETWORK_PROVIDER
+                } else if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    LocationManager.GPS_PROVIDER
+                } else null
+
+                if (activeProvider != null) {
+                    lm.getCurrentLocation(activeProvider, null, executor) { loc ->
+                        if (loc != null) {
+                            location = loc
+                        }
+                        latch.countDown()
+                    }
+                    latch.await(1800, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+            } catch (_: Exception) {
+            } finally {
+                executor.shutdown()
+            }
+        }
+
+        val loc = location ?: return null
+        val nearest = UzbekistanCities.findNearest(loc.latitude, loc.longitude)
         setCityId(nearest.id)
         return nearest.name.get(uiState.value.settings.script)
     }

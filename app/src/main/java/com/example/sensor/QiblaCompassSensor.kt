@@ -136,7 +136,7 @@ class QiblaCompassSensor(private val context: Context) {
                     initialized = true
                     rawAzimuth
                 } else {
-                    smoothAzimuthCircular(smoothedAzimuth, rawAzimuth, ALPHA_AZIMUTH_SMOOTHING)
+                    smoothAzimuthAdaptive(smoothedAzimuth, rawAzimuth)
                 }
 
                 trySend(
@@ -173,16 +173,16 @@ class QiblaCompassSensor(private val context: Context) {
         }
 
         if (rotationSensor != null) {
-            sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_GAME)
             if (accelSensor != null) {
-                sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_UI)
+                sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME)
             }
             if (magnetSensor != null) {
-                sensorManager.registerListener(listener, magnetSensor, SensorManager.SENSOR_DELAY_UI)
+                sensorManager.registerListener(listener, magnetSensor, SensorManager.SENSOR_DELAY_GAME)
             }
         } else if (hasAccelAndMagnet) {
-            sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_UI)
-            sensorManager.registerListener(listener, magnetSensor, SensorManager.SENSOR_DELAY_UI)
+            sensorManager.registerListener(listener, accelSensor, SensorManager.SENSOR_DELAY_GAME)
+            sensorManager.registerListener(listener, magnetSensor, SensorManager.SENSOR_DELAY_GAME)
         }
 
         awaitClose {
@@ -277,6 +277,28 @@ class QiblaCompassSensor(private val context: Context) {
             var delta = targetDeg - currentDeg
             while (delta > 180f) delta -= 360f
             while (delta < -180f) delta += 360f
+            return ((currentDeg + alpha * delta) % 360f + 360f) % 360f
+        }
+
+        /**
+         * Adaptive Exponential Smoothing matching Xiaomi MIUI / iOS Compass behavior:
+         * Fast turns (>10°) track instantly with ~0.92f alpha (near-zero latency).
+         * Slow movements suppress sensor jitter with lower alpha (0.15f..0.35f).
+         */
+        fun smoothAzimuthAdaptive(
+            currentDeg: Float,
+            targetDeg: Float
+        ): Float {
+            var delta = targetDeg - currentDeg
+            while (delta > 180f) delta -= 360f
+            while (delta < -180f) delta += 360f
+            val absDelta = kotlin.math.abs(delta)
+            val alpha = when {
+                absDelta > 10f -> 0.92f
+                absDelta > 3f -> 0.65f
+                absDelta > 1f -> 0.35f
+                else -> 0.15f
+            }
             return ((currentDeg + alpha * delta) % 360f + 360f) % 360f
         }
     }

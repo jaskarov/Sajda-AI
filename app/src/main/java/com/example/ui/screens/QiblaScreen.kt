@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ScreenLockRotation
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -48,6 +49,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -168,7 +173,7 @@ fun QiblaScreen(
         targetValue = continuousDialTarget,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            stiffness = 3000f
         ),
         label = "dial_rotation"
     )
@@ -176,18 +181,18 @@ fun QiblaScreen(
         targetValue = continuousQiblaTarget,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            stiffness = 3000f
         ),
         label = "qibla_rotation"
     )
     val animatedTiltX by animateFloatAsState(
         targetValue = compassState.tiltX.coerceIn(-1f, 1f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(stiffness = 1500f),
         label = "tilt_x"
     )
     val animatedTiltY by animateFloatAsState(
         targetValue = compassState.tiltY.coerceIn(-1f, 1f),
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(stiffness = 1500f),
         label = "tilt_y"
     )
 
@@ -209,7 +214,50 @@ fun QiblaScreen(
         }
     }
 
+    val coroutineScope = rememberCoroutineScope()
+    var isDetectingLocation by remember { mutableStateOf(false) }
     val textMeasurer = rememberTextMeasurer()
+    val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val cardinalLayouts = remember(textMeasurer, onSurfaceVariantColor) {
+        listOf(
+            Triple(0, "N", textMeasurer.measure(
+                text = "N",
+                style = TextStyle(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = Color(0xFFD94A4A)
+                )
+            )),
+            Triple(90, "E", textMeasurer.measure(
+                text = "E",
+                style = TextStyle(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = onSurfaceVariantColor
+                )
+            )),
+            Triple(180, "S", textMeasurer.measure(
+                text = "S",
+                style = TextStyle(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = onSurfaceVariantColor
+                )
+            )),
+            Triple(270, "W", textMeasurer.measure(
+                text = "W",
+                style = TextStyle(
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = onSurfaceVariantColor
+                )
+            ))
+        )
+    }
 
     Box(
         modifier = modifier
@@ -460,26 +508,11 @@ fun QiblaScreen(
                             )
                         }
 
-                        val cardinals = listOf(
-                            0 to "N",
-                            90 to "E",
-                            180 to "S",
-                            270 to "W"
-                        )
                         val labelRadius = outerRadius - 50f
-                        cardinals.forEach { (deg, label) ->
+                        cardinalLayouts.forEach { (deg, _, layoutResult) ->
                             val rad = Math.toRadians(deg.toDouble() - 90.0)
                             val lx = center.x + (labelRadius * cos(rad)).toFloat()
                             val ly = center.y + (labelRadius * sin(rad)).toFloat()
-                            val layoutResult = textMeasurer.measure(
-                                text = label,
-                                style = TextStyle(
-                                    fontFamily = JetBrainsMonoFontFamily,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = if (deg == 0) 17.sp else 15.sp,
-                                    color = if (deg == 0) Color(0xFFD94A4A) else onSurfaceVariantColor
-                                )
-                            )
                             // Counter-rotate label text so letters remain upright
                             rotate(degrees = -animatedDialAngle, pivot = Offset(lx, ly)) {
                                 drawText(
@@ -726,12 +759,18 @@ fun QiblaScreen(
                         Manifest.permission.ACCESS_COARSE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
                     if (fineGranted || coarseGranted) {
-                        val detected = onDetectNearestCity()
-                        locationMessage = if (detected != null) {
-                            lText("Shahar yangilandi: $detected", "Шаҳар янгиланди: $detected")
-                                .get(script)
-                        } else {
-                            lText("GPS signali topilmadi", "GPS сигнали топилмади").get(script)
+                        isDetectingLocation = true
+                        coroutineScope.launch {
+                            val detected = withContext(Dispatchers.IO) {
+                                onDetectNearestCity()
+                            }
+                            isDetectingLocation = false
+                            locationMessage = if (detected != null) {
+                                lText("Shahar yangilandi: $detected", "Шаҳар янгиланди: $detected")
+                                    .get(script)
+                            } else {
+                                lText("GPS signali topilmadi", "GPS сигнали топилмади").get(script)
+                            }
                         }
                     } else {
                         locationLauncher.launch(
@@ -742,18 +781,34 @@ fun QiblaScreen(
                         )
                     }
                 },
+                enabled = !isDetectingLocation,
                 modifier = Modifier
                     .height(48.dp)
                     .testTag("detect_city_location_button")
             ) {
-                Icon(Icons.Default.MyLocation, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    lText(
-                        "Joylashuv bo‘yicha shaharni aniqlash",
-                        "Жойлашув бўйича шаҳарни аниқлаш"
-                    ).get(script)
-                )
+                if (isDetectingLocation) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        lText(
+                            "Joylashuv aniqlanmoqda...",
+                            "Жойлашув аниқланмоқда..."
+                        ).get(script)
+                    )
+                } else {
+                    Icon(Icons.Default.MyLocation, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        lText(
+                            "Joylashuv bo‘yicha shaharni aniqlash",
+                            "Жойлашув бўйича шаҳарни аниқлаш"
+                        ).get(script)
+                    )
+                }
             }
 
             if (locationMessage != null) {
