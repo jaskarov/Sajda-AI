@@ -374,8 +374,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun importBackupFromUri(uri: Uri) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val result = runCatching {
-                val raw = getApplication<Application>().contentResolver.openInputStream(uri)?.use { stream ->
-                    stream.bufferedReader(Charsets.UTF_8).readText()
+                val resolver = getApplication<Application>().contentResolver
+                val pfd = runCatching { resolver.openFileDescriptor(uri, "r") }.getOrNull()
+                val size = pfd?.use { it.statSize } ?: -1L
+                if (size > SajdaBackupManager.MAX_BACKUP_BYTES) {
+                    return@launch backupStatusMessageFlow.let {
+                        it.value = com.example.domain.model.lText(
+                            "Tiklash xatosi: Zaxira fayli hajmi 2 MB dan oshmasligi kerak",
+                            "Тиклаш хатоси: Захира файли ҳажми 2 МБ дан ошмаслиги керак"
+                        )
+                    }
+                }
+                val raw = resolver.openInputStream(uri)?.use { stream ->
+                    val reader = stream.bufferedReader(Charsets.UTF_8)
+                    val buffer = CharArray(SajdaBackupManager.MAX_BACKUP_BYTES.toInt() + 1024)
+                    val count = reader.read(buffer)
+                    if (count > SajdaBackupManager.MAX_BACKUP_BYTES) {
+                        return@launch backupStatusMessageFlow.let {
+                            it.value = com.example.domain.model.lText(
+                                "Tiklash xatosi: Zaxira fayli hajmi 2 MB dan oshmasligi kerak",
+                                "Тиклаш хатоси: Захира файли ҳажми 2 МБ дан ошмаслиги керак"
+                            )
+                        }
+                    }
+                    if (count > 0) String(buffer, 0, count) else ""
                 } ?: ""
                 backupManager.importFromJson(raw)
             }.getOrElse { err ->

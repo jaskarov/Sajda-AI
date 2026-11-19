@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         QazoPrayerEntity::class,
         PrayerSyncMetadataEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class SajdaDatabase : RoomDatabase() {
@@ -111,6 +111,17 @@ abstract class SajdaDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_prayer_history_completedAtMillis` ON `prayer_history` (`completedAtMillis`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_prayer_history_dayKey` ON `prayer_history` (`dayKey`)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): SajdaDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -118,7 +129,7 @@ abstract class SajdaDatabase : RoomDatabase() {
                     SajdaDatabase::class.java,
                     "sajda_ai_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { INSTANCE = it }
             }

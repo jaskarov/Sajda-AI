@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Enforce HTTPS only across the entire application -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Pinned domains for Uzbekistan monthly prayer times -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">islomapi.uz</domain>
+        <domain includeSubdomains="true">api.aladhan.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

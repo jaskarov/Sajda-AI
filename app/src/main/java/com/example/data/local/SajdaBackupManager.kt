@@ -76,6 +76,10 @@ class SajdaBackupManager(
     private val historyRepo: PrayerHistoryRepository,
     private val qazoRepo: QazoPrayerRepository
 ) {
+    companion object {
+        const val MAX_BACKUP_BYTES = 2 * 1024 * 1024L // 2 MB
+    }
+
     private val json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -132,6 +136,9 @@ class SajdaBackupManager(
     suspend fun importFromJson(rawJson: String): BackupRestoreResult {
         if (rawJson.isBlank()) {
             return BackupRestoreResult.Failure("Fayl bo‘sh")
+        }
+        if (rawJson.length > MAX_BACKUP_BYTES) {
+            return BackupRestoreResult.Failure("Zaxira fayli hajmi 2 MB dan oshmasligi kerak")
         }
         val payload = runCatching {
             json.decodeFromString<SajdaBackupPayload>(rawJson)

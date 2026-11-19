@@ -37,3 +37,18 @@
 -keep class androidx.camera.** { *; }
 -keep class androidx.media3.** { *; }
 -dontwarn androidx.media3.**
+
+# Remote Data DTOs (IslomApi & Aladhan) and Retrofit Services
+-keep,includedescriptorclasses class com.example.data.remote.**$$serializer { *; }
+-keepclassmembers class com.example.data.remote.** {
+    *** Companion;
+}
+-keep class com.example.data.remote.** { *; }
+-keepattributes Signature, EnclosingMethod
+-keepclassmembers,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+-dontwarn okhttp3.**
+-dontwarn retrofit2.**
+-keep class retrofit2.** { *; }
+
