@@ -553,7 +553,8 @@ fun ActivePrayerScreen(
                                             style = MaterialTheme.typography.labelMedium,
                                             color = if (isPoseAligned) PoseMatchedGreen else NightGold,
                                             fontWeight = FontWeight.Bold,
-                                            maxLines = 1
+                                            maxLines = 1,
+                                            modifier = Modifier.testTag("active_pose_status_text")
                                         )
                                     }
                                 }

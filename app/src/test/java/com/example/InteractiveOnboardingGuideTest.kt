@@ -31,7 +31,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], qualifiers = "w400dp-h900dp")
 class InteractiveOnboardingGuideTest {
 
     @get:Rule
@@ -66,7 +66,8 @@ class InteractiveOnboardingGuideTest {
         composeRule.onNodeWithText("NAMOZ TARTIBI • 1 / 6").assertIsDisplayed()
 
         // Tap Listen on Step 1 (Takbir)
-        composeRule.onNodeWithTag("guide_listen_step_takbir").performClick()
+        composeRule.onNodeWithTag("guide_listen_step_takbir").performScrollTo().performClick()
+        composeRule.waitForIdle()
         assertEquals(listOf("takbir"), playedAssets)
 
         // Toggle Female & Seated mode live and verify fiqh note adapts
@@ -127,7 +128,8 @@ class InteractiveOnboardingGuideTest {
         composeRule.onNodeWithTag("guide_step_tab_2").performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithText("NAMOZ TARTIBI • 3 / 6").assertIsDisplayed()
-        composeRule.onNodeWithTag("guide_listen_step_ruku").performClick()
+        composeRule.onNodeWithTag("guide_listen_step_ruku").performScrollTo().performClick()
+        composeRule.waitForIdle()
         assertEquals("ruku", playedAsset)
 
         // Jump directly to Step 6 (Salam) and start practice

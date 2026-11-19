@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -154,9 +155,9 @@ class FriendlyUiAndQazoTest {
         }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("active_pose_status_chip").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("QIYOM").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Tasdiqlandi ✓").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("active_pose_status_chip").assertIsDisplayed()
+        composeRule.onNodeWithTag("active_pose_status_text").assertTextContains("QIYOM", substring = true)
+        composeRule.onNodeWithTag("active_pose_status_text").assertTextContains("Tasdiqlandi", substring = true)
         composeRule.onNodeWithText("θt:", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("θk:", substring = true).assertDoesNotExist()
     }

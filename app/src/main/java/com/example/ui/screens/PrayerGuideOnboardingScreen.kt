@@ -826,10 +826,14 @@ private fun PrayerGuideStepPage(
             }
 
             // Bottom-right Listen Audio pill (plays bundled offline Qori MP3)
-            Surface(
+            Button(
                 onClick = onPlayAudio,
                 shape = CircleShape,
-                color = SaffronGold,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = SaffronGold,
+                    contentColor = Color(0xFF1B1400)
+                ),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(12.dp)
@@ -837,7 +841,6 @@ private fun PrayerGuideStepPage(
                     .testTag("guide_listen_${step.id}")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
