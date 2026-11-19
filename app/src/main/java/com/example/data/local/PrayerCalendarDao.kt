@@ -33,8 +33,36 @@ interface PrayerCalendarDao {
         day: Int
     ): PrayerCalendarDayEntity?
 
+    @Query(
+        "SELECT * FROM prayer_calendar_days " +
+            "WHERE cityId = :cityId AND year = :year AND month = :month " +
+            "ORDER BY day ASC"
+    )
+    fun observeMonth(
+        cityId: String,
+        year: Int,
+        month: Int
+    ): Flow<List<PrayerCalendarDayEntity>>
+
+    @Query(
+        "SELECT * FROM prayer_calendar_days " +
+            "WHERE cityId = :cityId AND year = :year AND month = :month " +
+            "ORDER BY day ASC"
+    )
+    suspend fun getMonth(
+        cityId: String,
+        year: Int,
+        month: Int
+    ): List<PrayerCalendarDayEntity>
+
     @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE cityId = :cityId AND year = :year")
     suspend fun countForCityYear(cityId: String, year: Int): Int
+
+    @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE cityId = :cityId")
+    suspend fun countForCity(cityId: String): Int
+
+    @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE cityId = :cityId")
+    fun observeCachedDayCount(cityId: String): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM prayer_calendar_days WHERE year = :year")
     suspend fun countForYear(year: Int): Int
@@ -47,4 +75,7 @@ interface PrayerCalendarDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(days: List<PrayerCalendarDayEntity>)
+
+    @Query("DELETE FROM prayer_calendar_days WHERE year < :minYear")
+    suspend fun deleteOlderThan(minYear: Int): Int
 }

@@ -46,12 +46,16 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.LearnScreen
 import com.example.ui.screens.OnboardingScreen
 import com.example.ui.screens.PermissionsScreen
+import com.example.ui.screens.PrayerGuideOnboardingScreen
 import com.example.ui.screens.QiblaScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.WeeklyProgressScreen
 import com.example.ui.viewmodel.MainViewModel
 import com.example.ui.viewmodel.PrayerCoachViewModel
 import kotlinx.serialization.Serializable
+
+@Serializable
+data class PrayerGuideOnboardingRoute(val isFirstLaunch: Boolean = false)
 
 @Serializable
 data object OnboardingRoute
@@ -87,7 +91,7 @@ fun SajdaNavGraph(
     val startDest: Any = if (mainUiState.settings.onboardingCompleted) {
         MainTabsRoute
     } else {
-        OnboardingRoute
+        PrayerGuideOnboardingRoute(isFirstLaunch = true)
     }
 
     val baseDensity = LocalDensity.current
@@ -105,6 +109,45 @@ fun SajdaNavGraph(
         navController = navController,
         startDestination = startDest
     ) {
+        composable<PrayerGuideOnboardingRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<PrayerGuideOnboardingRoute>()
+            PrayerGuideOnboardingScreen(
+                initialGender = mainUiState.settings.gender,
+                initialScript = mainUiState.settings.script,
+                initialSeatedMode = mainUiState.settings.seatedPrayerMode,
+                isFirstLaunch = route.isFirstLaunch,
+                onPlayAudio = { prompt, assetId ->
+                    mainViewModel.speakSample(prompt, assetId)
+                },
+                onPreferencesUpdated = { gender, script, seatedMode ->
+                    mainViewModel.setGender(gender)
+                    mainViewModel.setScript(script)
+                    mainViewModel.setSeatedPrayerMode(seatedMode)
+                },
+                onStartPractice = if (route.isFirstLaunch) null else {
+                    {
+                        mainViewModel.stopSampleAudio()
+                        navController.navigate(CalibrationRoute(PrayerTrack.BOMDOD_SUNNAT.id)) {
+                            popUpTo<PrayerGuideOnboardingRoute> { inclusive = true }
+                        }
+                    }
+                },
+                onFinish = { gender, script, seatedMode ->
+                    mainViewModel.stopSampleAudio()
+                    mainViewModel.setGender(gender)
+                    mainViewModel.setScript(script)
+                    mainViewModel.setSeatedPrayerMode(seatedMode)
+                    if (route.isFirstLaunch) {
+                        navController.navigate(OnboardingRoute) {
+                            popUpTo<PrayerGuideOnboardingRoute> { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+
         composable<OnboardingRoute> {
             var pendingSeated by remember { mutableStateOf(mainUiState.settings.seatedPrayerMode) }
             var pendingLargeText by remember { mutableStateOf(mainUiState.settings.largeTextMode) }
@@ -117,6 +160,9 @@ fun SajdaNavGraph(
                 onAccessibilitySelected = { seated, largeText ->
                     pendingSeated = seated
                     pendingLargeText = largeText
+                },
+                onOpenPrayerGuide = {
+                    navController.navigate(PrayerGuideOnboardingRoute(isFirstLaunch = false))
                 },
                 onComplete = { gender, script, cityId ->
                     mainViewModel.completeOnboarding(
@@ -229,6 +275,9 @@ fun SajdaNavGraph(
                             learnInitialTab = 1
                             selectedTab = 1
                         },
+                        onOpenPrayerGuide = {
+                            navController.navigate(PrayerGuideOnboardingRoute(isFirstLaunch = false))
+                        },
                         modifier = Modifier.padding(innerPadding)
                     )
                     1 -> LearnScreen(
@@ -247,6 +296,9 @@ fun SajdaNavGraph(
                             } else {
                                 mainViewModel.startTahoratAutoPlay(steps)
                             }
+                        },
+                        onOpenPrayerGuide = {
+                            navController.navigate(PrayerGuideOnboardingRoute(isFirstLaunch = false))
                         },
                         modifier = Modifier.padding(innerPadding)
                     )
@@ -288,7 +340,8 @@ fun SajdaNavGraph(
             LaunchedEffect(route.trackId, route.qazoTypeId) {
                 coachViewModel.prepareTrack(
                     track = PrayerTrack.fromId(route.trackId),
-                    qazoTypeId = route.qazoTypeId
+                    qazoTypeId = route.qazoTypeId,
+                    initialSettings = mainUiState.settings
                 )
             }
 
@@ -328,7 +381,8 @@ fun SajdaNavGraph(
                     track = track,
                     mode = mode,
                     fallbackReason = reason,
-                    qazoTypeId = route.qazoTypeId
+                    qazoTypeId = route.qazoTypeId,
+                    initialSettings = mainUiState.settings
                 )
             }
 
@@ -343,6 +397,7 @@ fun SajdaNavGraph(
                     coachViewModel.switchToAudioOnly(FallbackReason.USER_SELECTED)
                 },
                 onSwitchToCamera = coachViewModel::switchToCameraMode,
+                onLifecyclePause = coachViewModel::pauseOnBackground,
                 onExit = {
                     coachViewModel.cancelContinuationCountdown()
                     navController.popBackStack()
@@ -370,6 +425,9 @@ fun SajdaNavGraph(
                 onClearBackupMessage = mainViewModel::clearBackupMessage,
                 onOpenPermissions = {
                     navController.navigate(PermissionsRoute(fromSettings = true))
+                },
+                onOpenPrayerGuide = {
+                    navController.navigate(PrayerGuideOnboardingRoute(isFirstLaunch = false))
                 },
                 onTestAudio = {
                     val sample = lText(

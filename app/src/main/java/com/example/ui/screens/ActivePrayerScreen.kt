@@ -79,6 +79,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.LocalRuntimePermissions
 import com.example.audio.AudioCoachStatus
 import com.example.audio.PrayerAudioCoach
@@ -111,6 +113,7 @@ fun ActivePrayerScreen(
     onExtendContinuation: () -> Unit = {},
     onSwitchToAudioOnly: () -> Unit,
     onSwitchToCamera: () -> Unit,
+    onLifecyclePause: () -> Unit = {},
     onExit: () -> Unit
 ) {
     BackHandler(onBack = onExit)
@@ -120,25 +123,21 @@ fun ActivePrayerScreen(
     val script = uiState.settings.script
     var savedOriginalVolume by remember { mutableStateOf<Int?>(null) }
 
-    val shouldBoostVolume = uiState.settings.autoBoostPrayerVolume &&
+    val shouldBoostVolume = uiState.settingsLoaded &&
+        uiState.settings.autoBoostPrayerVolume &&
         uiState.fallbackReason != FallbackReason.LOW_LIGHT_DARK_ROOM
+
+    // Auto-pause active prayer timer & audio when app enters background or phone call takes focus
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        onLifecyclePause()
+    }
 
     DisposableEffect(Unit) {
         val window = (context as? Activity)?.window
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-        savedOriginalVolume = if (shouldBoostVolume) {
-            audioManager?.let {
-                PrayerAudioCoach.boostPrayerStreamVolume(
-                    audioManager = it,
-                    targetFraction = PrayerAudioCoach.PRAYER_VOLUME_TARGET_FRACTION
-                )
-            }
-        } else {
-            null
-        }
         onDispose {
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
             if (audioManager != null && savedOriginalVolume != null) {
                 PrayerAudioCoach.restorePrayerStreamVolume(audioManager, savedOriginalVolume)
                 savedOriginalVolume = null
@@ -146,14 +145,20 @@ fun ActivePrayerScreen(
         }
     }
 
-    // Restore original media volume once final prayer track completes (when no Sunnat->Farz continuation pending)
-    LaunchedEffect(uiState.isCompleted, uiState.pendingNextTrack) {
-        if (uiState.isCompleted && uiState.pendingNextTrack == null && savedOriginalVolume != null) {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-            if (audioManager != null) {
+    // Only boost volume AFTER DataStore settings are confirmed loaded, and never when disabled or in dark room
+    LaunchedEffect(uiState.settingsLoaded, shouldBoostVolume, uiState.isCompleted, uiState.pendingNextTrack) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return@LaunchedEffect
+        val shouldRestoreNow = (uiState.isCompleted && uiState.pendingNextTrack == null) || !shouldBoostVolume
+        if (shouldRestoreNow) {
+            if (savedOriginalVolume != null) {
                 PrayerAudioCoach.restorePrayerStreamVolume(audioManager, savedOriginalVolume)
                 savedOriginalVolume = null
             }
+        } else if (savedOriginalVolume == null) {
+            savedOriginalVolume = PrayerAudioCoach.boostPrayerStreamVolume(
+                audioManager = audioManager,
+                targetFraction = PrayerAudioCoach.PRAYER_VOLUME_TARGET_FRACTION
+            )
         }
     }
 
@@ -305,6 +310,28 @@ fun ActivePrayerScreen(
                         color = NightGold,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+
+            if (uiState.isPaused && uiState.pausedByInterruption) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = PoseAlertCoral.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, PoseAlertCoral.copy(alpha = 0.65f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("interruption_pause_banner")
+                ) {
+                    Text(
+                        text = lText(
+                            "Qo‘ng‘iroq yoki uzilish sababli pauza qilindi • Davom etish uchun «Davom» tugmasini bosing",
+                            "Қўнғироқ ёки узилиш сабабли пауза қилинди • Давом этиш учун «Давом» тугмасини босинг"
+                        ).get(script),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFFFFD6CE),
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }

@@ -165,9 +165,9 @@ fun CalibrationScreen(
         if (uiState.poseSnapshot.isFullBodyVisible && !voiceConfirmed) {
             voiceConfirmed = true
             onSpeakCalibrationPrompt(
-                "Joyingiz qulay! Boshlaymiz. Qo'llaringizni ko'tarib Allohu akbar deng."
+                "Joyingiz qulay! Namozni boshlaymiz."
             )
-            delay(2800L)
+            delay(1800L)
             navigateToSession(CoachMode.CAMERA_AI, FallbackReason.NONE)
         }
     }

@@ -4,18 +4,21 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
+import com.example.data.remote.PrayerTimeFetchResult
+import com.example.data.remote.RemoteUzbekistanPrayerTimesService
+import com.example.data.remote.UzbekistanPrayerTimesService
+import com.example.domain.engine.GetPrayerTimesUseCase
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.UzbekCity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -38,59 +41,37 @@ private data class BundledCalendarDay(
     val x: String
 )
 
-@Serializable
-private data class AladhanCalendarResponse(
-    val code: Int = 0,
-    val data: List<AladhanDayData> = emptyList()
-)
+sealed interface PrayerSyncOutcome {
+    data class Synced(
+        val cityId: String,
+        val provider: String,
+        val fetchedDaysCount: Int,
+        val totalCachedDays: Int
+    ) : PrayerSyncOutcome
 
-@Serializable
-private data class AladhanDayData(
-    val timings: AladhanTimings,
-    val date: AladhanDateContainer
-)
-
-@Serializable
-private data class AladhanTimings(
-    val Fajr: String,
-    val Sunrise: String,
-    val Dhuhr: String,
-    val Asr: String,
-    val Maghrib: String,
-    val Isha: String
-)
-
-@Serializable
-private data class AladhanDateContainer(
-    val gregorian: AladhanGregorian
-)
-
-@Serializable
-private data class AladhanGregorian(
-    val day: String,
-    val year: String,
-    val month: AladhanMonth
-)
-
-@Serializable
-private data class AladhanMonth(
-    val number: Int
-)
+    data class OfflineCacheReady(
+        val cityId: String,
+        val totalCachedDays: Int,
+        val reason: String
+    ) : PrayerSyncOutcome
+}
 
 class PrayerCalendarRepository(
     private val context: Context,
-    private val dao: PrayerCalendarDao
+    private val dao: PrayerCalendarDao,
+    private val syncMetadataDao: PrayerSyncMetadataDao? = null,
+    private val remoteService: UzbekistanPrayerTimesService = RemoteUzbekistanPrayerTimesService.create(),
+    private val isOnlineProvider: (() -> Boolean)? = null
 ) {
     companion object {
         private const val TAG = "PrayerCalendarRepo"
         private const val ASSET_FILE_NAME = "uzbekistan_prayer_calendar_365.json"
         private const val EXPECTED_MIN_ROWS = 365 * 14
-        private val HH_MM_REGEX = Regex("(\\d{2}:\\d{2})")
     }
 
     private val json = Json { ignoreUnknownKeys = true }
     private val seedMutex = Mutex()
-    private val solarUseCase = com.example.domain.engine.GetPrayerTimesUseCase()
+    private val solarUseCase = GetPrayerTimesUseCase()
 
     suspend fun ensureSeededFromAssets() = withContext(Dispatchers.IO) {
         seedMutex.withLock {
@@ -190,7 +171,28 @@ class PrayerCalendarRepository(
         }
     }
 
+    fun observeMonthSchedule(
+        cityId: String,
+        year: Int,
+        month: Int
+    ): Flow<List<PrayerCalendarDayEntity>> = dao.observeMonth(cityId, year, month)
+
+    fun observeCachedDayCount(cityId: String): Flow<Int> = dao.observeCachedDayCount(cityId)
+
     fun observeLatestSyncMillis(cityId: String): Flow<Long?> = dao.observeLatestSyncMillis(cityId)
+
+    fun observeSyncMetadata(cityId: String): Flow<PrayerSyncMetadataEntity?> =
+        syncMetadataDao?.observeMetadata(cityId) ?: flowOf(null)
+
+    suspend fun getMonthSchedule(
+        cityId: String,
+        year: Int,
+        month: Int
+    ): List<PrayerCalendarDayEntity> = withContext(Dispatchers.IO) {
+        ensureSeededFromAssets()
+        if (year != 2026) ensureYearSeededOffline(year)
+        dao.getMonth(cityId, year, month)
+    }
 
     suspend fun getTodayAndTomorrow(
         cityId: String,
@@ -222,84 +224,128 @@ class PrayerCalendarRepository(
     suspend fun syncFromNetworkIfConnected(
         cityId: String,
         nowMillis: Long = System.currentTimeMillis()
-    ): Boolean = withContext(Dispatchers.IO) {
-        ensureSeededFromAssets()
-        if (!isNetworkConnected()) return@withContext false
+    ): Boolean {
+        return syncCityPrayerTimes(cityId, nowMillis) is PrayerSyncOutcome.Synced
+    }
 
+    suspend fun syncCityPrayerTimes(
+        cityId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ): PrayerSyncOutcome = withContext(Dispatchers.IO) {
+        ensureSeededFromAssets()
         val city = UzbekistanCities.findById(cityId)
         val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply { timeInMillis = nowMillis }
         val currentYear = cal.get(Calendar.YEAR)
         val currentMonth = cal.get(Calendar.MONTH) + 1
+        if (currentYear != 2026) {
+            ensureYearSeededOffline(currentYear)
+        }
+
+        if (!isNetworkConnected()) {
+            val cached = dao.countForCity(city.id)
+            recordSyncMetadata(
+                city = city,
+                provider = "uz_taqvim_365",
+                syncedAtMillis = syncMetadataDao?.getMetadata(city.id)?.lastSyncedAtMillis ?: 0L,
+                cachedDays = cached,
+                success = false,
+                error = "offline"
+            )
+            return@withContext PrayerSyncOutcome.OfflineCacheReady(
+                cityId = city.id,
+                totalCachedDays = cached,
+                reason = "offline"
+            )
+        }
+
         val nextCal = (cal.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
         val nextYear = nextCal.get(Calendar.YEAR)
         val nextMonth = nextCal.get(Calendar.MONTH) + 1
 
-        val currentOk = fetchAndStoreMonth(city, currentYear, currentMonth, nowMillis)
-        val nextOk = fetchAndStoreMonth(city, nextYear, nextMonth, nowMillis)
-        currentOk || nextOk
+        val currentResult = remoteService.fetchMonthlyPrayerTimes(city, currentYear, currentMonth, nowMillis)
+        val nextResult = remoteService.fetchMonthlyPrayerTimes(city, nextYear, nextMonth, nowMillis)
+
+        val fetchedRows = mutableListOf<PrayerCalendarDayEntity>()
+        var activeProvider: String? = null
+        val errors = mutableListOf<String>()
+
+        when (currentResult) {
+            is PrayerTimeFetchResult.Success -> {
+                fetchedRows += currentResult.days
+                activeProvider = currentResult.provider
+            }
+            is PrayerTimeFetchResult.Failure -> errors += currentResult.reason
+        }
+
+        when (nextResult) {
+            is PrayerTimeFetchResult.Success -> {
+                fetchedRows += nextResult.days
+                if (activeProvider == null) activeProvider = nextResult.provider
+            }
+            is PrayerTimeFetchResult.Failure -> errors += nextResult.reason
+        }
+
+        if (fetchedRows.isNotEmpty()) {
+            dao.insertAll(fetchedRows)
+            val totalCached = dao.countForCity(city.id)
+            val provider = activeProvider ?: RemoteUzbekistanPrayerTimesService.PROVIDER_ALADHAN
+            recordSyncMetadata(
+                city = city,
+                provider = provider,
+                syncedAtMillis = nowMillis,
+                cachedDays = totalCached,
+                success = true,
+                error = null
+            )
+            PrayerSyncOutcome.Synced(
+                cityId = city.id,
+                provider = provider,
+                fetchedDaysCount = fetchedRows.size,
+                totalCachedDays = totalCached
+            )
+        } else {
+            val totalCached = dao.countForCity(city.id)
+            val reason = errors.joinToString("; ").ifBlank { "network_error" }
+            val existingMeta = syncMetadataDao?.getMetadata(city.id)
+            recordSyncMetadata(
+                city = city,
+                provider = existingMeta?.provider ?: "uz_taqvim_365",
+                syncedAtMillis = existingMeta?.lastSyncedAtMillis ?: 0L,
+                cachedDays = totalCached,
+                success = false,
+                error = reason
+            )
+            PrayerSyncOutcome.OfflineCacheReady(
+                cityId = city.id,
+                totalCachedDays = totalCached,
+                reason = reason
+            )
+        }
     }
 
-    private suspend fun fetchAndStoreMonth(
+    private suspend fun recordSyncMetadata(
         city: UzbekCity,
-        year: Int,
-        month: Int,
-        syncTimeMillis: Long
-    ): Boolean {
-        return runCatching {
-            val urlStr = "https://api.aladhan.com/v1/calendar/$year/$month" +
-                "?latitude=${city.latitude}&longitude=${city.longitude}" +
-                "&method=99&methodSettings=15,null,15&school=1" +
-                "&tune=0,0,0,2,0,3,0,0,0&timezonestring=Asia/Tashkent"
-            val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6000
-                readTimeout = 6000
-                setRequestProperty("Accept", "application/json")
-            }
-            try {
-                if (conn.responseCode !in 200..299) return@runCatching false
-                val body = conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-                val parsed = json.decodeFromString<AladhanCalendarResponse>(body)
-                if (parsed.data.isEmpty()) return@runCatching false
-
-                val rows = parsed.data.mapNotNull { dayData ->
-                    val d = dayData.date.gregorian.day.toIntOrNull() ?: return@mapNotNull null
-                    val m = dayData.date.gregorian.month.number
-                    val y = dayData.date.gregorian.year.toIntOrNull() ?: year
-                    PrayerCalendarDayEntity(
-                        cityId = city.id,
-                        year = y,
-                        month = m,
-                        day = d,
-                        bomdod = extractHhMm(dayData.timings.Fajr),
-                        quyosh = extractHhMm(dayData.timings.Sunrise),
-                        peshin = extractHhMm(dayData.timings.Dhuhr),
-                        asr = extractHhMm(dayData.timings.Asr),
-                        shom = extractHhMm(dayData.timings.Maghrib),
-                        xufton = extractHhMm(dayData.timings.Isha),
-                        source = "aladhan_online",
-                        syncedAtMillis = syncTimeMillis
-                    )
-                }
-                if (rows.isNotEmpty()) {
-                    dao.insertAll(rows)
-                    true
-                } else {
-                    false
-                }
-            } finally {
-                conn.disconnect()
-            }
-        }.onFailure { err ->
-            Log.w(TAG, "Online calendar sync failed for ${city.id} $year-$month", err)
-        }.getOrDefault(false)
-    }
-
-    private fun extractHhMm(raw: String): String {
-        return HH_MM_REGEX.find(raw)?.groupValues?.getOrNull(1) ?: "00:00"
+        provider: String,
+        syncedAtMillis: Long,
+        cachedDays: Int,
+        success: Boolean,
+        error: String?
+    ) {
+        syncMetadataDao?.upsert(
+            PrayerSyncMetadataEntity(
+                cityId = city.id,
+                cityName = city.name.latin,
+                provider = provider,
+                lastSyncedAtMillis = syncedAtMillis,
+                cachedDaysCount = cachedDays,
+                lastSyncSuccess = success,
+                lastError = error
+            )
+        )
     }
 
     private fun isNetworkConnected(): Boolean {
+        isOnlineProvider?.let { return it() }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
         val activeNetwork = cm.activeNetwork ?: return false

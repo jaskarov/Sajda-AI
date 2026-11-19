@@ -70,6 +70,7 @@ fun OnboardingScreen(
     initialSeatedMode: Boolean = false,
     initialLargeTextMode: Boolean = false,
     onAccessibilitySelected: (seatedMode: Boolean, largeTextMode: Boolean) -> Unit = { _, _ -> },
+    onOpenPrayerGuide: (() -> Unit)? = null,
     onComplete: (Gender, TextScript, String) -> Unit
 ) {
     var selectedScript by remember { mutableStateOf(initialScript) }
@@ -133,6 +134,27 @@ fun OnboardingScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.86f)
                     )
+                    if (onOpenPrayerGuide != null) {
+                        Spacer(Modifier.height(4.dp))
+                        Surface(
+                            onClick = onOpenPrayerGuide,
+                            shape = CircleShape,
+                            color = Color.White.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, SaffronGold.copy(alpha = 0.6f)),
+                            modifier = Modifier.testTag("onboarding_reopen_guide_button")
+                        ) {
+                            Text(
+                                text = lText(
+                                    "📖 Namoz tartibini (6 qadam) qayta ko‘rish",
+                                    "📖 Намоз тартибини (6 қадам) қайта кўриш"
+                                ).get(selectedScript),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color(0xFFFFE7B3),
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
 

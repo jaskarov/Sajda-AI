@@ -80,6 +80,7 @@ fun LearnScreen(
     initialTab: Int = 0,
     onTabChanged: (Int) -> Unit = {},
     onToggleTahoratAutoPlay: (List<PurificationGuideItem>) -> Unit = {},
+    onOpenPrayerGuide: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val script = uiState.settings.script
@@ -161,6 +162,60 @@ fun LearnScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    item {
+                        Card(
+                            onClick = onOpenPrayerGuide,
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("learn_open_prayer_guide_button")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                                ) {
+                                    Text(
+                                        text = lText(
+                                            "Interaktiv namoz qo‘llanmasi",
+                                            "Интерактив намоз қўлланмаси"
+                                        ).get(script),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = lText(
+                                            "6 ta bosqichni jonli siluet va ovoz bilan ko‘rib chiqing",
+                                            "6 та босқични жонли силуэт ва овоз билан кўриб чиқинг"
+                                        ).get(script),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                FilledTonalButton(onClick = onOpenPrayerGuide) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(lText("Boshlash", "Бошлаш").get(script))
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth(),

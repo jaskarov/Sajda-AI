@@ -1,14 +1,17 @@
 package com.example.audio
 
 import android.content.Context
+import android.media.AudioFocusRequest
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -48,8 +51,11 @@ data class TtsReadinessInfo(
 /**
  * 100% Offline-capable Prayer Audio Coach:
  * 1) Plays bundled res/raw MP3 Qori recitations & duas via Media3 ExoPlayer
- *    (supporting comma-separated multi-clip queues such as "salovat,robbana").
- * 2) Plays Uzbek coach prompts via local MP3s (if supplied) or Android's built-in TextToSpeech.
+ *    (supporting comma-separated multi-clip queues such as "takbir,fotiha" and "salovat,robbana").
+ * 2) Preserves multi-clip queues and user gender across pause/resume and handles AudioFocus
+ *    interruptions (e.g. incoming phone calls) by notifying the prayer session ViewModel.
+ * 3) Prevents jarring English/foreign robotic TTS for Uzbek coaching prompts when Uzbek TTS
+ *    is unavailable and Qori MP3 mode is active.
  */
 class PrayerAudioCoach(private val context: Context) {
 
@@ -97,6 +103,8 @@ class PrayerAudioCoach(private val context: Context) {
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val audioManager: AudioManager? =
+        context.applicationContext.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
 
     private val _status = MutableStateFlow<AudioCoachStatus>(AudioCoachStatus.Idle)
     val status: StateFlow<AudioCoachStatus> = _status.asStateFlow()
@@ -116,18 +124,36 @@ class PrayerAudioCoach(private val context: Context) {
     private var currentSpeechJob: Job? = null
     private var progressJob: Job? = null
     private var onPlaybackCompletedCallback: (() -> Unit)? = null
+    private var onAudioFocusLostCallback: (() -> Unit)? = null
     private var activeUtteranceId: String? = null
     private var activeText: String = ""
     private var activeSpeed: Float = 1.0f
+    private var activeGender: Gender = Gender.MALE
+    private var activePreferOfflineMp3: Boolean = true
+    private var activeAudioAssetId: String = ""
     private var isPaused: Boolean = false
     private val pendingQueuedUris = mutableListOf<Uri>()
     private var pendingInterClipPauseMs: Long = 0L
     private var totalClipSegments: Int = 1
     private var completedClipSegments: Int = 0
     private var interClipDelayJob: Job? = null
+    private var hasAudioFocus: Boolean = false
+    private var audioFocusRequest: AudioFocusRequest? = null
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        handleAudioFocusChange(focusChange)
+    }
 
     val hasUzbekTts: Boolean
         get() = _ttsReadiness.value.hasUzbekLocale
+
+    fun shouldAvoidForeignRobotTts(preferOfflineMp3: Boolean): Boolean {
+        return preferOfflineMp3 && !_ttsReadiness.value.hasUzbekLocale
+    }
+
+    fun setOnAudioFocusLost(callback: (() -> Unit)?) {
+        onAudioFocusLostCallback = callback
+    }
 
     private val localRecitationsDir: File by lazy {
         File(context.filesDir, "recitations").apply { mkdirs() }
@@ -138,6 +164,64 @@ class PrayerAudioCoach(private val context: Context) {
         initLocalTts()
     }
 
+    private fun requestAudioFocus() {
+        val manager = audioManager ?: return
+        if (hasAudioFocus) return
+        runCatching {
+            val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val attrs = android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                val req = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(attrs)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                    .build()
+                audioFocusRequest = req
+                manager.requestAudioFocus(req)
+            } else {
+                @Suppress("DEPRECATION")
+                manager.requestAudioFocus(
+                    audioFocusChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+            }
+            hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val manager = audioManager ?: return
+        if (!hasAudioFocus) return
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { manager.abandonAudioFocusRequest(it) }
+                audioFocusRequest = null
+            } else {
+                @Suppress("DEPRECATION")
+                manager.abandonAudioFocus(audioFocusChangeListener)
+            }
+        }
+        hasAudioFocus = false
+    }
+
+    private fun handleAudioFocusChange(focusChange: Int) {
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                hasAudioFocus = false
+                scope.launch {
+                    if (!isPaused) {
+                        pause()
+                        onAudioFocusLostCallback?.invoke()
+                    }
+                }
+            }
+        }
+    }
+
     private fun initExoPlayer() {
         runCatching {
             val audioAttributes = AudioAttributes.Builder()
@@ -146,7 +230,7 @@ class PrayerAudioCoach(private val context: Context) {
                 .build()
 
             exoPlayer = ExoPlayer.Builder(context.applicationContext)
-                .setAudioAttributes(audioAttributes, true)
+                .setAudioAttributes(audioAttributes, false)
                 .build().apply {
                     addListener(object : Player.Listener {
                         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -161,22 +245,18 @@ class PrayerAudioCoach(private val context: Context) {
                         override fun onPlaybackStateChanged(playbackState: Int) {
                             if (playbackState == Player.STATE_ENDED) {
                                 progressJob?.cancel()
-                                if (pendingQueuedUris.isNotEmpty() && !isPaused) {
-                                    completedClipSegments++
-                                    val nextUri = pendingQueuedUris.removeAt(0)
-                                    val pauseMs = pendingInterClipPauseMs
-                                    interClipDelayJob?.cancel()
-                                    interClipDelayJob = scope.launch {
-                                        if (pauseMs > 0L) delay(pauseMs)
-                                        if (isActive && !isPaused) {
-                                            runCatching {
-                                                exoPlayer?.setMediaItem(MediaItem.fromUri(nextUri))
-                                                exoPlayer?.prepare()
-                                                exoPlayer?.play()
+                                if (pendingQueuedUris.isNotEmpty()) {
+                                    if (!isPaused) {
+                                        val pauseMs = pendingInterClipPauseMs
+                                        interClipDelayJob?.cancel()
+                                        interClipDelayJob = scope.launch {
+                                            if (pauseMs > 0L) delay(pauseMs)
+                                            if (isActive && !isPaused && pendingQueuedUris.isNotEmpty()) {
+                                                playNextQueuedUri()
                                             }
                                         }
                                     }
-                                } else {
+                                } else if (!isPaused) {
                                     _isPlaying.value = false
                                     _playbackProgress.value = 1f
                                     onPlaybackCompletedCallback?.invoke()
@@ -189,6 +269,20 @@ class PrayerAudioCoach(private val context: Context) {
             Log.w(TAG, "ExoPlayer initialization failed (fallback to TTS only)", err)
             exoPlayer = null
         }
+    }
+
+    private fun playNextQueuedUri(): Boolean {
+        val player = exoPlayer ?: return false
+        if (pendingQueuedUris.isEmpty()) return false
+        val nextUri = pendingQueuedUris.removeAt(0)
+        completedClipSegments++
+        return runCatching {
+            player.playbackParameters = PlaybackParameters(activeSpeed)
+            player.setMediaItem(MediaItem.fromUri(nextUri))
+            player.prepare()
+            player.play()
+            true
+        }.getOrDefault(false)
     }
 
     private fun initLocalTts() {
@@ -285,8 +379,13 @@ class PrayerAudioCoach(private val context: Context) {
         isPaused = false
         activeText = text
         activeSpeed = speed
+        activeGender = gender
+        activePreferOfflineMp3 = preferOfflineMp3
+        activeAudioAssetId = audioAssetId
         onPlaybackCompletedCallback = onCompleted
         _playbackProgress.value = 0f
+
+        requestAudioFocus()
 
         currentSpeechJob = scope.launch {
             if (preferOfflineMp3 && audioAssetId.isNotBlank()) {
@@ -364,18 +463,34 @@ class PrayerAudioCoach(private val context: Context) {
      * so worshippers facing the prayer mat hear step confirmation without looking at the screen.
      */
     fun playStepConfirmedChime() {
+        playWarmTone(baseFreqHz = 528.0, harmonicFreqHz = 792.0, durationMs = 110, gain = 0.45)
+    }
+
+    /**
+     * Softer, slightly lower transition chime (~432 Hz, ~95ms) used when transitioning
+     * silently between recitations without invoking foreign-accented robotic TTS.
+     */
+    fun playSoftTransitionChime() {
+        playWarmTone(baseFreqHz = 432.0, harmonicFreqHz = 648.0, durationMs = 95, gain = 0.30)
+    }
+
+    private fun playWarmTone(
+        baseFreqHz: Double,
+        harmonicFreqHz: Double,
+        durationMs: Int,
+        gain: Double
+    ) {
         scope.launch(Dispatchers.IO) {
             runCatching {
                 val sampleRate = 22050
-                val durationMs = 110
                 val count = (sampleRate * durationMs) / 1000
                 val samples = ShortArray(count)
                 for (i in 0 until count) {
                     val t = i.toDouble() / sampleRate
                     val env = kotlin.math.sin(Math.PI * i / count.toDouble()) * kotlin.math.exp(-3.5 * t)
-                    val tone = kotlin.math.sin(2.0 * Math.PI * 528.0 * t) * 0.65 +
-                        kotlin.math.sin(2.0 * Math.PI * 792.0 * t) * 0.25
-                    samples[i] = (tone * env * Short.MAX_VALUE * 0.45).toInt()
+                    val tone = kotlin.math.sin(2.0 * Math.PI * baseFreqHz * t) * 0.65 +
+                        kotlin.math.sin(2.0 * Math.PI * harmonicFreqHz * t) * 0.25
+                    samples[i] = (tone * env * Short.MAX_VALUE * gain).toInt()
                         .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
                         .toShort()
                 }
@@ -403,7 +518,7 @@ class PrayerAudioCoach(private val context: Context) {
                     .build()
                 track.write(samples, 0, samples.size)
                 track.play()
-                delay(160L)
+                delay(durationMs + 50L)
                 track.stop()
                 track.release()
             }
@@ -438,6 +553,7 @@ class PrayerAudioCoach(private val context: Context) {
 
     fun pause() {
         isPaused = true
+        interClipDelayJob?.cancel()
         runCatching { exoPlayer?.pause() }
         activeUtteranceId = null
         runCatching { localTts?.stop() }
@@ -448,12 +564,31 @@ class PrayerAudioCoach(private val context: Context) {
     fun resume() {
         if (!isPaused) return
         isPaused = false
+        requestAudioFocus()
         val player = exoPlayer
-        val isReady = runCatching { player?.playbackState == Player.STATE_READY }.getOrDefault(false)
-        if (isReady && player != null) {
-            runCatching { player.play() }
-        } else if (activeText.isNotEmpty() && _playbackProgress.value < 1f) {
-            speakWithLocalTts(activeText, Gender.MALE, activeSpeed)
+        val playbackState = runCatching { player?.playbackState ?: Player.STATE_IDLE }
+            .getOrDefault(Player.STATE_IDLE)
+
+        when {
+            player != null && (playbackState == Player.STATE_READY || playbackState == Player.STATE_BUFFERING) -> {
+                runCatching { player.play() }
+            }
+            pendingQueuedUris.isNotEmpty() -> {
+                if (!playNextQueuedUri() && activeText.isNotEmpty() && _playbackProgress.value < 1f) {
+                    speakWithLocalTts(activeText, activeGender, activeSpeed)
+                }
+            }
+            activePreferOfflineMp3 && activeAudioAssetId.isNotBlank() && _playbackProgress.value < 1f -> {
+                val uris = resolveOfflineAudioUris(activeAudioAssetId)
+                if (uris.isEmpty() || !playOfflineUris(uris, activeSpeed, activeAudioAssetId)) {
+                    if (activeText.isNotEmpty()) {
+                        speakWithLocalTts(activeText, activeGender, activeSpeed)
+                    }
+                }
+            }
+            activeText.isNotEmpty() && _playbackProgress.value < 1f -> {
+                speakWithLocalTts(activeText, activeGender, activeSpeed)
+            }
         }
     }
 
@@ -461,6 +596,7 @@ class PrayerAudioCoach(private val context: Context) {
         currentSpeechJob?.cancel()
         progressJob?.cancel()
         stopInternal()
+        abandonAudioFocus()
         _status.value = AudioCoachStatus.Idle
         _playbackProgress.value = 0f
     }
@@ -542,5 +678,34 @@ class PrayerAudioCoach(private val context: Context) {
                 }
             }
         }
+    }
+
+    @VisibleForTesting
+    internal fun simulateAudioFocusChangeForTest(focusChange: Int) {
+        handleAudioFocusChange(focusChange)
+    }
+
+    @VisibleForTesting
+    internal fun setTtsReadinessForTest(info: TtsReadinessInfo) {
+        _ttsReadiness.value = info
+    }
+
+    @VisibleForTesting
+    internal fun pendingQueuedCountForTest(): Int = pendingQueuedUris.size
+
+    @VisibleForTesting
+    internal fun activeGenderForTest(): Gender = activeGender
+
+    @VisibleForTesting
+    internal fun enqueuePendingUriForTest(uri: Uri, gender: Gender) {
+        activeGender = gender
+        activePreferOfflineMp3 = true
+        activeAudioAssetId = "takbir,fotiha"
+        pendingQueuedUris.clear()
+        pendingQueuedUris.add(uri)
+        pendingInterClipPauseMs = 1400L
+        totalClipSegments = 2
+        completedClipSegments = 0
+        _status.value = AudioCoachStatus.PlayingOfflineAudio("takbir + fotiha")
     }
 }

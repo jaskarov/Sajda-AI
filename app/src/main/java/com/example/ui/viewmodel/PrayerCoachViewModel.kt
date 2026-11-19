@@ -2,10 +2,12 @@ package com.example.ui.viewmodel
 
 import android.app.Application
 import android.os.SystemClock
+import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audio.AudioCoachStatus
 import com.example.audio.PrayerAudioCoach
+import com.example.audio.TtsReadinessInfo
 import com.example.data.local.PrayerHistoryRepository
 import com.example.data.local.QazoPrayerRepository
 import com.example.data.local.SajdaDatabase
@@ -32,12 +34,14 @@ import kotlinx.coroutines.launch
 data class PrayerCoachUiState(
     val track: PrayerTrack = PrayerTrack.PESHIN_SUNNAT_1,
     val settings: UserSettings = UserSettings(),
+    val settingsLoaded: Boolean = true,
     val steps: List<PrayerStep> = emptyList(),
     val currentStepIndex: Int = 0,
     val mode: CoachMode = CoachMode.CAMERA_AI,
     val fallbackReason: FallbackReason = FallbackReason.NONE,
     val poseSnapshot: PoseAnalysisSnapshot = PoseAnalysisSnapshot(),
     val isPaused: Boolean = false,
+    val pausedByInterruption: Boolean = false,
     val isCompleted: Boolean = false,
     val stepAudioDone: Boolean = false,
     val isPostRecitationCueActive: Boolean = false,
@@ -69,11 +73,13 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     private val sequenceEngine = PrayerSequenceEngine()
     private val audioCoach = PrayerAudioCoach(application)
 
-    private val _uiState = MutableStateFlow(PrayerCoachUiState())
+    private val _uiState = MutableStateFlow(PrayerCoachUiState(settingsLoaded = false))
     val uiState: StateFlow<PrayerCoachUiState> = _uiState.asStateFlow()
 
     private var timerJob: Job? = null
     private var nextTrackCountdownJob: Job? = null
+    private var startSessionJob: Job? = null
+    private var postCueDelayJob: Job? = null
     private var sessionStartMillis: Long = 0L
     private var stepEnteredMillis: Long = 0L
     private var activeSessionStarted: Boolean = false
@@ -82,10 +88,36 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     private var salamFirstTurnMillis: Long = 0L
 
     init {
+        audioCoach.setOnAudioFocusLost {
+            pauseOnExternalInterruption()
+        }
+        viewModelScope.launch {
+            prefsRepo.settingsFlow.collect { loadedSettings ->
+                _uiState.update { state ->
+                    val needsRebuild = !activeSessionStarted &&
+                        state.steps.isNotEmpty() &&
+                        state.settings.gender != loadedSettings.gender
+                    val updatedSteps = if (needsRebuild) {
+                        sequenceEngine.buildSteps(
+                            track = state.track,
+                            gender = loadedSettings.gender,
+                            qazoType = QazoPrayerType.fromId(state.qazoTypeId)
+                        )
+                    } else {
+                        state.steps
+                    }
+                    state.copy(
+                        settings = loadedSettings,
+                        settingsLoaded = true,
+                        steps = updatedSteps
+                    )
+                }
+            }
+        }
         viewModelScope.launch {
             audioCoach.playbackProgress.collect { progress ->
                 _uiState.update { state ->
-                    // Keep progress pinned at 1f while post-recitation cue speaks after surah
+                    // Keep progress pinned at 1f while post-recitation cue shows/speaks after surah
                     if (state.isPostRecitationCueActive || state.stepAudioDone) state
                     else state.copy(playbackProgress = progress)
                 }
@@ -101,22 +133,30 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     fun prepareTrack(
         track: PrayerTrack,
         initialMode: CoachMode = CoachMode.CAMERA_AI,
-        qazoTypeId: String = ""
+        qazoTypeId: String = "",
+        initialSettings: UserSettings? = null
     ) {
         nextTrackCountdownJob?.cancel()
-        val currentGender = _uiState.value.settings.gender
-        val initialSteps = sequenceEngine.buildSteps(track, currentGender)
+        startSessionJob?.cancel()
+        postCueDelayJob?.cancel()
+        val effectiveSettings = initialSettings ?: _uiState.value.settings
+        val alreadyLoaded = initialSettings != null || _uiState.value.settingsLoaded
+        val qazoType = QazoPrayerType.fromId(qazoTypeId)
+        val initialSteps = sequenceEngine.buildSteps(track, effectiveSettings.gender, qazoType)
         lastAutoAdvanceStepIndex = -1
         salamFirstSideDir = 0
         salamFirstTurnMillis = 0L
         _uiState.update {
             it.copy(
                 track = track,
+                settings = effectiveSettings,
+                settingsLoaded = alreadyLoaded,
                 steps = initialSteps,
                 currentStepIndex = 0,
                 mode = initialMode,
                 isCompleted = false,
                 isPaused = false,
+                pausedByInterruption = false,
                 stepAudioDone = false,
                 isPostRecitationCueActive = false,
                 calibrationConfirmedOnce = false,
@@ -128,23 +168,33 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 salamProgressStage = 0
             )
         }
-        viewModelScope.launch {
-            val settings = prefsRepo.settingsFlow.first()
-            if (settings.gender != currentGender) {
-                val updatedSteps = sequenceEngine.buildSteps(track, settings.gender)
-                _uiState.update { it.copy(settings = settings, steps = updatedSteps) }
-            } else {
-                _uiState.update { it.copy(settings = settings) }
+        if (!alreadyLoaded) {
+            viewModelScope.launch {
+                val settings = prefsRepo.settingsFlow.first()
+                val updatedSteps = sequenceEngine.buildSteps(track, settings.gender, qazoType)
+                _uiState.update {
+                    it.copy(
+                        settings = settings,
+                        settingsLoaded = true,
+                        steps = updatedSteps
+                    )
+                }
             }
         }
     }
 
     fun speakCalibrationPrompt(message: String) {
         val settings = _uiState.value.settings
+        if (audioCoach.shouldAvoidForeignRobotTts(settings.preferOfflineMp3)) {
+            if (settings.acousticChimeEnabled) {
+                audioCoach.playStepConfirmedChime()
+            }
+            return
+        }
         audioCoach.speak(
             text = message,
             gender = settings.gender,
-            preferOfflineMp3 = settings.preferOfflineMp3,
+            preferOfflineMp3 = false,
             speed = settings.voiceSpeed
         )
     }
@@ -160,27 +210,45 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         track: PrayerTrack,
         mode: CoachMode,
         fallbackReason: FallbackReason = FallbackReason.NONE,
-        qazoTypeId: String = ""
+        qazoTypeId: String = "",
+        initialSettings: UserSettings? = null
     ) {
         nextTrackCountdownJob?.cancel()
-        val currentGender = _uiState.value.settings.gender
-        val steps = sequenceEngine.buildSteps(track, currentGender)
+        startSessionJob?.cancel()
+        postCueDelayJob?.cancel()
+        timerJob?.cancel()
+
+        val effectiveSettings = initialSettings ?: _uiState.value.settings
+        val alreadyLoaded = initialSettings != null || _uiState.value.settingsLoaded
+        val qazoType = QazoPrayerType.fromId(qazoTypeId)
+        val initialSteps = sequenceEngine.buildSteps(track, effectiveSettings.gender, qazoType)
+        val firstStepDurationSec = initialSteps.firstOrNull()
+            ?.let { (it.minHoldDurationMs / 1000L).toInt().coerceAtLeast(3) }
+            ?: 4
+
         activeSessionStarted = true
         sessionStartMillis = SystemClock.elapsedRealtime()
+        stepEnteredMillis = sessionStartMillis
         lastAutoAdvanceStepIndex = -1
         salamFirstSideDir = 0
         salamFirstTurnMillis = 0L
+
         _uiState.update {
             it.copy(
                 track = track,
-                steps = steps,
+                settings = effectiveSettings,
+                settingsLoaded = alreadyLoaded,
+                steps = initialSteps,
                 mode = mode,
                 fallbackReason = fallbackReason,
                 currentStepIndex = 0,
                 isPaused = false,
+                pausedByInterruption = false,
                 isCompleted = false,
                 stepAudioDone = false,
                 isPostRecitationCueActive = false,
+                playbackProgress = 0f,
+                audioOnlyRemainingSec = firstStepDurationSec,
                 pendingNextTrack = null,
                 nextTrackCountdownSec = 0,
                 nextTrackCountdownTotalSec = 5,
@@ -189,15 +257,33 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 salamProgressStage = 0
             )
         }
-        enterStep(0)
 
-        viewModelScope.launch {
-            val settings = prefsRepo.settingsFlow.first()
-            if (settings.gender != currentGender) {
-                val updatedSteps = sequenceEngine.buildSteps(track, settings.gender)
-                _uiState.update { it.copy(settings = settings, steps = updatedSteps) }
-            } else {
-                _uiState.update { it.copy(settings = settings) }
+        if (alreadyLoaded) {
+            enterStep(0)
+        } else {
+            // Wait for persisted DataStore settings before firing step 0 audio so female,
+            // senior voice-speed, seated mode, and auto-volume settings apply on step 0.
+            startSessionJob = viewModelScope.launch {
+                val loadedSettings = prefsRepo.settingsFlow.first()
+                if (!isActive || _uiState.value.isCompleted) return@launch
+                val currentState = _uiState.value
+                val finalSteps = if (loadedSettings.gender != effectiveSettings.gender) {
+                    sequenceEngine.buildSteps(track, loadedSettings.gender, qazoType)
+                } else {
+                    currentState.steps
+                }
+                _uiState.update {
+                    it.copy(
+                        settings = loadedSettings,
+                        settingsLoaded = true,
+                        steps = finalSteps
+                    )
+                }
+                // Only start step 0 if user hasn't already manually advanced or paused
+                val afterUpdate = _uiState.value
+                if (!afterUpdate.isPaused && !afterUpdate.isCompleted && afterUpdate.currentStepIndex == 0) {
+                    enterStep(0)
+                }
             }
         }
     }
@@ -209,7 +295,8 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         startActivePrayerSession(
             track = nextTrack,
             mode = state.mode,
-            fallbackReason = state.fallbackReason
+            fallbackReason = state.fallbackReason,
+            initialSettings = state.settings
         )
     }
 
@@ -320,14 +407,58 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    /**
+     * Called automatically on incoming phone call / AudioFocus loss so the prayer timer
+     * and audio never advance in the background while the worshipper is interrupted.
+     */
+    fun pauseOnExternalInterruption() {
+        val state = _uiState.value
+        if (!activeSessionStarted || state.isCompleted || state.isPaused) return
+        postCueDelayJob?.cancel()
+        timerJob?.cancel()
+        audioCoach.pause()
+        _uiState.update {
+            it.copy(
+                isPaused = true,
+                pausedByInterruption = true
+            )
+        }
+    }
+
+    /**
+     * Called from ActivePrayerScreen Lifecycle.Event.ON_PAUSE when app goes to background
+     * or an incoming call overlay takes focus.
+     */
+    fun pauseOnBackground() {
+        val state = _uiState.value
+        if (state.isCompleted) {
+            // Pause continuation auto-start countdown if user leaves screen
+            nextTrackCountdownJob?.cancel()
+            return
+        }
+        pauseOnExternalInterruption()
+    }
+
     fun togglePause() {
-        val nextPaused = !_uiState.value.isPaused
-        _uiState.update { it.copy(isPaused = nextPaused) }
+        val state = _uiState.value
+        val nextPaused = !state.isPaused
+        _uiState.update {
+            it.copy(
+                isPaused = nextPaused,
+                pausedByInterruption = if (nextPaused) it.pausedByInterruption else false
+            )
+        }
         if (nextPaused) {
+            postCueDelayJob?.cancel()
             audioCoach.pause()
             timerJob?.cancel()
         } else {
-            audioCoach.resume()
+            val latest = _uiState.value
+            if (latest.isPostRecitationCueActive && !latest.stepAudioDone) {
+                finalizeStepAudio(latest.currentStepIndex)
+            } else {
+                audioCoach.resume()
+            }
             if (_uiState.value.mode == CoachMode.AUDIO_ONLY) {
                 startAudioOnlyStepTimer()
             }
@@ -335,6 +466,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun advanceToNextStep() {
+        postCueDelayJob?.cancel()
         val state = _uiState.value
         if (state.isCompleted) return
         _uiState.update { it.copy(hapticFeedbackPulse = it.hapticFeedbackPulse + 1) }
@@ -351,6 +483,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun enterStep(index: Int) {
         timerJob?.cancel()
+        postCueDelayJob?.cancel()
         val state = _uiState.value
         val step = state.steps.getOrNull(index) ?: return
         stepEnteredMillis = SystemClock.elapsedRealtime()
@@ -395,19 +528,30 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                     isPostRecitationCueActive = true
                 )
             }
-            val useTakbirMp3Fallback = latest.settings.preferOfflineMp3 &&
-                !audioCoach.hasUzbekTts &&
-                cue.contains("Allohu akbar", ignoreCase = true)
-            audioCoach.speak(
-                text = cue,
-                gender = latest.settings.gender,
-                preferOfflineMp3 = useTakbirMp3Fallback,
-                speed = latest.settings.voiceSpeed,
-                audioAssetId = if (useTakbirMp3Fallback) "takbir" else "",
-                onCompleted = {
-                    finalizeStepAudio(stepIndex)
+            // Protect khushu: never interrupt serene Qori recitations with English/foreign robotic TTS.
+            if (audioCoach.shouldAvoidForeignRobotTts(latest.settings.preferOfflineMp3)) {
+                if (latest.settings.acousticChimeEnabled) {
+                    audioCoach.playSoftTransitionChime()
                 }
-            )
+                postCueDelayJob?.cancel()
+                postCueDelayJob = viewModelScope.launch {
+                    delay(900L)
+                    if (isActive && !_uiState.value.isPaused) {
+                        finalizeStepAudio(stepIndex)
+                    }
+                }
+            } else {
+                audioCoach.speak(
+                    text = cue,
+                    gender = latest.settings.gender,
+                    preferOfflineMp3 = false,
+                    speed = latest.settings.voiceSpeed,
+                    audioAssetId = "",
+                    onCompleted = {
+                        finalizeStepAudio(stepIndex)
+                    }
+                )
+            }
         } else {
             finalizeStepAudio(stepIndex)
         }
@@ -462,9 +606,26 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    @androidx.annotation.VisibleForTesting
+    @VisibleForTesting
     internal fun completeStepAudioForTest() {
         finalizeStepAudio(_uiState.value.currentStepIndex)
+    }
+
+    @VisibleForTesting
+    internal fun triggerPrimaryAudioCompletedForTest() {
+        val state = _uiState.value
+        val step = state.currentStep ?: return
+        handlePrimaryAudioCompleted(state.currentStepIndex, step)
+    }
+
+    @VisibleForTesting
+    internal fun simulateAudioFocusLossForTest(focusChange: Int) {
+        audioCoach.simulateAudioFocusChangeForTest(focusChange)
+    }
+
+    @VisibleForTesting
+    internal fun setTtsReadinessForTest(info: TtsReadinessInfo) {
+        audioCoach.setTtsReadinessForTest(info)
     }
 
     private fun startAudioOnlyStepTimer() {
@@ -514,6 +675,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
 
     private fun completePrayerSession() {
         timerJob?.cancel()
+        postCueDelayJob?.cancel()
         nextTrackCountdownJob?.cancel()
         audioCoach.stop()
         val state = _uiState.value
@@ -527,6 +689,8 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         _uiState.update {
             it.copy(
                 isCompleted = true,
+                isPaused = false,
+                pausedByInterruption = false,
                 totalSessionSeconds = durationSec,
                 pendingNextTrack = nextTrack,
                 nextTrackCountdownSec = if (nextTrack != null) 5 else 0,
@@ -551,19 +715,25 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         if (nextTrack != null) {
-            val announcement = when (nextTrack) {
-                PrayerTrack.VITR_VOJIB -> "Xufton sunnati tugadi. 5 soniyada Vitr namozi boshlanadi."
-                PrayerTrack.PESHIN_SUNNAT_2,
-                PrayerTrack.SHOM_SUNNAT,
-                PrayerTrack.XUFTON_SUNNAT -> "Farz namozi tugadi. 5 soniyada 2 rakat sunnat boshlanadi."
-                else -> "Sunnat namozi tugadi. 5 soniyada Farz namozi boshlanadi."
+            if (audioCoach.shouldAvoidForeignRobotTts(state.settings.preferOfflineMp3)) {
+                if (state.settings.acousticChimeEnabled) {
+                    audioCoach.playStepConfirmedChime()
+                }
+            } else {
+                val announcement = when (nextTrack) {
+                    PrayerTrack.VITR_VOJIB -> "Xufton sunnati tugadi. 5 soniyada Vitr namozi boshlanadi."
+                    PrayerTrack.PESHIN_SUNNAT_2,
+                    PrayerTrack.SHOM_SUNNAT,
+                    PrayerTrack.XUFTON_SUNNAT -> "Farz namozi tugadi. 5 soniyada 2 rakat sunnat boshlanadi."
+                    else -> "Sunnat namozi tugadi. 5 soniyada Farz namozi boshlanadi."
+                }
+                audioCoach.speak(
+                    text = announcement,
+                    gender = state.settings.gender,
+                    preferOfflineMp3 = false,
+                    speed = state.settings.voiceSpeed
+                )
             }
-            audioCoach.speak(
-                text = announcement,
-                gender = state.settings.gender,
-                preferOfflineMp3 = false,
-                speed = state.settings.voiceSpeed
-            )
             launchContinuationCountdown(fromSeconds = 5)
         }
     }
@@ -586,6 +756,8 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
 
     fun cleanup() {
         timerJob?.cancel()
+        postCueDelayJob?.cancel()
+        startSessionJob?.cancel()
         nextTrackCountdownJob?.cancel()
         audioCoach.release()
     }

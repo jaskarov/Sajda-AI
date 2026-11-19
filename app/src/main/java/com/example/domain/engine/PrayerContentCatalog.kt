@@ -31,8 +31,8 @@ object PrayerContentCatalog {
             translitLatin = "Bismillahir Rohmanir Rohiym. Alhamdulillahi Robbil ‘alamiyn. Ar-Rohmanir Rohiym. Maliki yavmiddiyn. Iyyaka na‘budu va iyyaka nasta‘iyn. Ihdinas-sirotol mustaqiym. Sirotollaziyna an‘amta ‘alayhim g‘oyril mag‘zubi ‘alayhim valazzolliyn.",
             translitCyrillic = "Бисмиллаҳир Роҳманир Роҳийм. Алҳамдулиллаҳи Роббил ъаламийн. Ар-Роҳманир Роҳийм. Малики явмиддийн. Ийяка наъбуду ва ийяка настаъийн. Иҳдинас-сиротол мустақийм. Сиротоллазийна анъамта ъалайҳим ғойрил мағзуби ъалайҳим валаззоллийн.",
             meaning = lText(
-                "Mehribon va rahmli Alloh nomi bilan. Barcha hamd olamlar Robbi Allohga xosdir...",
-                "Меҳрибон ва раҳмли Аллоҳ номи билан. Барча ҳамд оламлар Робби Аллоҳга хосдир..."
+                "Mehribon va rahmli Alloh nomi bilan. Barcha hamd olamlar Robbi Allohga xosdir. U Mehribon va Rahmli, jazo kunining egasidir. Sengagina ibodat qilamiz va Sendangina yordam so‘raymiz. Bizni g‘azabga uchraganlar va adashganlarning emas, O‘zing ne’mat bergan zotlarning to‘g‘ri yo‘liga hidoyat qilgin.",
+                "Меҳрибон ва раҳмли Аллоҳ номи билан. Барча ҳамд оламлар Робби Аллоҳга хосдир. У Меҳрибон ва Раҳмли, жазо кунининг эгасидир. Сенгагина ибодат қиламиз ва Сендангина ёрдам сўраймиз. Бизни ғазабга учраганлар ва адашганларнинг эмас, Ўзинг неъмат берган зотларнинг тўғри йўлига ҳидоят қилгин."
             ),
             ttsPrompt = "Bismillahir Rohmanir Rohiym. Alhamdulillahi Robbil alamiyn. Ar-Rohmanir Rohiym. Maliki yavmiddiyn. Iyyaka na'budu va iyyaka nasta'iyn. Ihdinas sirotol mustaqiym. Sirotollaziyna an'amta alayhim g'oyril mag'zubi alayhim valazzolliyn. Amiyn."
         ),
@@ -44,8 +44,8 @@ object PrayerContentCatalog {
             translitLatin = "Inna a‘toynakal Kavsar. Fasolli lirobbika vanhar. Inna shani’aka huval abtar.",
             translitCyrillic = "Инна аътойнакал Кавсар. Фасолли лироббика ванҳар. Инна шаниъака ҳувал абтар.",
             meaning = lText(
-                "Albatta, Biz senga Kavsarni ato etdik. Bas, Robbing uchun namoz o‘qi va qurbonlik qil.",
-                "Албатта, Биз сенга Кавсарни ато этдик. Бас, Роббинг учун намоз ўқи ва қурбонлик қил."
+                "Albatta, Biz senga Kavsarni ato etdik. Bas, Robbing uchun namoz o‘qi va qurbonlik qil. Albatta, seni yomon ko‘ruvchining o‘zi naslsizdir.",
+                "Албатта, Биз сенга Кавсарни ато этдик. Бас, Роббинг учун намоз ўқи ва қурбонлик қил. Албатта, сени ёмон кўрувчининг ўзи наслсиздир."
             ),
             ttsPrompt = "Bismillahir Rohmanir Rohiym. Inna a'toynakal Kavsar. Fasolli lirobbika vanhar. Inna shani'aka huval abtar."
         ),
@@ -65,41 +65,55 @@ object PrayerContentCatalog {
         SurahLibraryItem(
             id = "falaq",
             title = lText("Falaq surasi", "Фалақ сураси"),
-            subtitle = lText("Panoh so‘rash surasi", "Паноҳ сўраш сураси"),
-            arabicText = "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ مِن شَرِّ مَا خَلَقَ ۝ وَمِن شَرِّ غَاسِقٍ إِذَا وَقَبَ",
+            subtitle = lText("Panoh so‘rash surasi (5 oyat)", "Паноҳ сўраш сураси (5 оят)"),
+            arabicText = "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ مِنْ شَرِّ مَا خَلَقَ ۝ وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ ۝ وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ ۝ وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
             translitLatin = "Qul a‘uzu birobbil falaq. Min sharri ma xolaq. Va min sharri g‘osiqin iza vaqob. Va min sharrin-naffasati fil uqod. Va min sharri hasidin iza hasad.",
             translitCyrillic = "Қул аъузу бироббил фалақ. Мин шарри ма холақ. Ва мин шарри ғосиқин иза вақоб. Ва мин шаррин-наффасати фил уқод. Ва мин шарри ҳасидин иза ҳасад.",
             meaning = lText(
-                "Tong Robbidan yaratgan narsalarining yomonligidan panoh so‘rayman...",
-                "Тонг Роббидан яратган нарсаларининг ёмонлигидан паноҳ сўрайман..."
+                "Ayt: Tong Robbidan yaratgan narsalarining yomonligidan, zulmatga cho‘mgan tunning yomonligidan, tugunlarga dam soluvchilarning yomonligidan va hasad qilgan paytdagi hasadchining yomonligidan panoh so‘rayman.",
+                "Айт: Тонг Роббидан яратган нарсаларининг ёмонлигидан, зулматга чўмган туннинг ёмонлигидан, тугунларга дам солувчиларнинг ёмонлигидан ва ҳасад қилган пайтдаги ҳасадчининг ёмонлигидан паноҳ сўрайман."
             ),
             ttsPrompt = "Qul a'uzu birobbil falaq. Min sharri ma xolaq. Va min sharri g'osiqin iza vaqob. Va min sharrin naffasati fil uqod. Va min sharri hasidin iza hasad."
+        ),
+        SurahLibraryItem(
+            id = "nas",
+            title = lText("Nos surasi", "Нос сураси"),
+            subtitle = lText("Qur'onning oxirgi surasi (6 oyat)", "Қуръоннинг охирги сураси (6 оят)"),
+            arabicText = "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝ مَلِكِ النَّاسِ ۝ إِلَٰهِ النَّاسِ ۝ مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۝ الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ ۝ مِنَ الْجِنَّةِ وَالنَّاسِ",
+            translitLatin = "Qul a‘uzu birobbin-nas. Malikin-nas. Ilahin-nas. Min sharril vasvasil xonnas. Allaziy yuvasvisu fiy sudurin-nas. Minal jinnati van-nas.",
+            translitCyrillic = "Қул аъузу бироббин-нас. Маликин-нас. Илаҳин-нас. Мин шаррил васвасил хоннас. Аллазий ювасвису фий судурин-нас. Минал жиннати ван-нас.",
+            meaning = lText(
+                "Ayt: Insonlarning Robbidan, insonlarning Podshohidan, insonlarning Ilohidan — jinlardan va insonlardan bo‘lib, odamlarning dillariga vasvasa soluvchi yashirin vasvasachining yomonligidan panoh so‘rayman.",
+                "Айт: Инсонларнинг Роббидан, инсонларнинг Подшоҳидан, инсонларнинг Илоҳидан — жинлардан ва инсонлардан бўлиб, одамларнинг дилларига васваса солувчи яширин васвасачининг ёмонлигидан паноҳ сўрайман."
+            ),
+            ttsPrompt = "Qul a'uzu birobbin nas. Malikin nas. Ilahin nas. Min sharril vasvasil xonnas. Allaziy yuvasvisu fiy sudurin nas. Minal jinnati van nas.",
+            audioAssetId = "nas"
         ),
         SurahLibraryItem(
             id = "attahiyat",
             title = lText("Attahiyat (Tashahhud)", "Аттаҳият (Ташаҳҳуд)"),
             subtitle = lText("Qa'dada o‘qiladi", "Қаъдада ўқилади"),
-            arabicText = "التَّحِيَّاتُ لِلَّهِ وَالصَّلَوَاتُ وَالطَّيِّبَاتُ السَّلَامُ عَلَيْكَ أَيُّهَا النَّبِيُّ وَرَحْمَةُ اللَّهِ وَبَرَكَاتُهُ",
+            arabicText = "التَّحِيَّاتُ لِلَّهِ وَالصَّلَوَاتُ وَالطَّيِّبَاتُ السَّلَامُ عَلَيْكَ أَيُّهَا النَّبِيُّ وَرَحْمَةُ اللَّهِ وَبَرَكَاتُهُ السَّلَامُ عَلَيْنَا وَعَلَى عِبَادِ اللَّهِ الصَّالِحِينَ أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا اللَّهُ وَأَشْهَدُ أَنَّ مُحَمَّدًا عَبْدُهُ وَرَسُولُهُ",
             translitLatin = "Attahiyyatu lillahi vas-solavatu vat-toyyibat. Assalamu ‘alayka ayyuhan-nabiyyu va rohmatullohi va barokatuh. Assalamu ‘alayna va ‘ala ‘ibadillahis-solihiyn. Ashhadu alla ilaha illallohu va ashhadu anna Muhammadan ‘abduhu va rosuluh.",
             translitCyrillic = "Аттаҳийяту лиллаҳи вас-солавату ват-тоййибат. Ассаламу ъалайка айюҳан-набийю ва роҳматуллоҳи ва барокатуҳ. Ассаламу ъалайна ва ъала ъибадиллаҳис-солиҳийн. Ашҳаду алла илаҳа иллаллоҳу ва ашҳаду анна Муҳаммадан ъабдуҳу ва росулуҳ.",
             meaning = lText(
-                "Barcha maqtovlar, salovatlar va pok amallar Alloh uchundir...",
-                "Барча мақтовлар, саловатлар ва пок амаллар Аллоҳ учундир..."
+                "Barcha maqtovlar, salovatlar va pok amallar Alloh uchundir. Ey Payg‘ambar, sizga Allohning salomi, rahmati va barakoti bo‘lsin. Bizga va Allohning solih bandalariga ham salom bo‘lsin. Guvohlik beramanki, Allohdan o‘zga iloh yo‘q va guvohlik beramanki, Muhammad Uning bandasi va elchisidir.",
+                "Барча мақтовлар, саловатлар ва пок амаллар Аллоҳ учундир. Эй Пайғамбар, сизга Аллоҳнинг саломи, раҳмати ва баракоти бўлсин. Бизга ва Аллоҳнинг солиҳ бандаларига ҳам салом бўлсин. Гувоҳлик бераманки, Аллоҳдан ўзга илоҳ йўқ ва гувоҳлик бераманки, Муҳаммад Унинг бандаси ва элчисидир."
             ),
             ttsPrompt = "Attahiyyatu lillahi vas solavatu vat toyyibat. Assalamu alayka ayyuhan nabiyyu va rohmatullohi va barokatuh. Assalamu alayna va ala ibadillahis solihiyn. Ashhadu alla ilaha illallohu va ashhadu anna Muhammadan abduhu va rosuluh."
         ),
         SurahLibraryItem(
             id = "salovat",
-            title = lText("Salovat (Allohumma solli)", "Саловат (Аллоҳумма солли)"),
-            subtitle = lText("Oxirgi qa'dada o‘qiladi", "Охирги қаъдада ўқилади"),
-            arabicText = "اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ كَمَا صَلَّيْتَ عَلَى إِبْرَاهِيمَ",
-            translitLatin = "Allohumma solli ‘ala Muhammadin va ‘ala ali Muhammad, kama sollayta ‘ala Ibrohiyma va ‘ala ali Ibrohiym, innaka hamiydum-majiyd. Allohumma barik ‘ala Muhammadin va ‘ala ali Muhammad...",
-            translitCyrillic = "Аллоҳумма солли ъала Муҳаммадин ва ъала али Муҳаммад, кама соллайта ъала Иброҳийма ва ъала али Иброҳийм, иннака ҳамийдум-мажийд. Аллоҳумма барик ъала Муҳаммадин ва ъала али Муҳаммад...",
+            title = lText("Salovat (Allohumma solli va barik)", "Саловат (Аллоҳумма солли ва барик)"),
+            subtitle = lText("Oxirgi qa'dada to‘liq o‘qiladi", "Охирги қаъдада тўлиқ ўқилади"),
+            arabicText = "اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ كَمَا صَلَّيْتَ عَلَى إِبْرَاهِيمَ وَعَلَى آلِ إِبْرَاهِيمَ إِنَّكَ حَمِيدٌ مَجِيدٌ ۝ اللَّهُمَّ بَارِكْ عَلَى مُحَمَّدٍ وَعَلَى آلِ مُحَمَّدٍ كَمَا بَارَكْتَ عَلَى إِبْرَاهِيمَ وَعَلَى آلِ إِبْرَاهِيمَ إِنَّكَ حَمِيدٌ مَجِيدٌ",
+            translitLatin = "Allohumma solli ‘ala Muhammadin va ‘ala ali Muhammad, kama sollayta ‘ala Ibrohiyma va ‘ala ali Ibrohiym, innaka hamiydum-majiyd. Allohumma barik ‘ala Muhammadin va ‘ala ali Muhammad, kama barokta ‘ala Ibrohiyma va ‘ala ali Ibrohiym, innaka hamiydum-majiyd.",
+            translitCyrillic = "Аллоҳумма солли ъала Муҳаммадин ва ъала али Муҳаммад, кама соллайта ъала Иброҳийма ва ъала али Иброҳийм, иннака ҳамийдум-мажийд. Аллоҳумма барик ъала Муҳаммадин ва ъала али Муҳаммад, кама барокта ъала Иброҳийма ва ъала али Иброҳийм, иннака ҳамийдум-мажийд.",
             meaning = lText(
-                "Allohim, Ibrohim va uning oilasiga rahmat yo‘llaganing kabi Muhammad va u zotning oilasiga ham rahmat va baraka yog‘dir.",
-                "Аллоҳим, Иброҳим ва унинг оиласига раҳмат йўллаганинг каби Муҳаммад ва у зотнинг оиласига ҳам раҳмат ва барака ёғдир."
+                "Allohim, Ibrohim va u zotning oilasiga rahmat yog‘dirganing kabi Muhammad va u zotning oilasiga ham rahmat yog‘dirgin. Albatta, Sen maqtovga loyiq va buyuksan. Allohim, Ibrohim va u zotning oilasiga baraka berganing kabi Muhammad va u zotning oilasiga ham baraka bergin. Albatta, Sen maqtovga loyiq va buyuksan.",
+                "Аллоҳим, Иброҳим ва у зотнинг оиласига раҳмат ёғдирганинг каби Муҳаммад ва у зотнинг оиласига ҳам раҳмат ёғдиргин. Албатта, Сен мақтовга лойиқ ва буюксан. Аллоҳим, Иброҳим ва у зотнинг оиласига барака берганинг каби Муҳаммад ва у зотнинг оиласига ҳам барака бергин. Албатта, Сен мақтовга лойиқ ва буюксан."
             ),
-            ttsPrompt = "Allohumma solli ala Muhammadin va ala ali Muhammad, kama sollayta ala Ibrohiyma va ala ali Ibrohiym, innaka hamiydum majiyd."
+            ttsPrompt = "Allohumma solli ala Muhammadin va ala ali Muhammad, kama sollayta ala Ibrohiyma va ala ali Ibrohiym, innaka hamiydum majiyd. Allohumma barik ala Muhammadin va ala ali Muhammad, kama barokta ala Ibrohiyma va ala ali Ibrohiym, innaka hamiydum majiyd."
         ),
         SurahLibraryItem(
             id = "robbana",
@@ -113,8 +127,25 @@ object PrayerContentCatalog {
                 "Роббимиз, бизга бу дунёда ҳам яхшилик бер, охиратда ҳам яхшилик бер ва бизни дўзах азобидан сақла."
             ),
             ttsPrompt = "Robbana atina fid dunya hasanatan va fil axiroti hasanatan va qina azaban nar."
+        ),
+        SurahLibraryItem(
+            id = "qunut",
+            title = lText("Qunut duosi", "Қунут дуоси"),
+            subtitle = lText("Vitr namozining 3-rakatida o‘qiladi", "Витр намозининг 3-ракатида ўқилади"),
+            arabicText = "اللَّهُمَّ إِنَّا نَسْتَعِينُكَ وَنَسْتَغْفِرُكَ وَنُؤْمِنُ بِكَ وَنَتَوَكَّلُ عَلَيْكَ وَنُثْنِي عَلَيْكَ الْخَيْرَ نَشْكُرُكَ وَلَا نَكْفُرُكَ وَنَخْلَعُ وَنَتْرُكُ مَنْ يَفْجُرُكَ ۝ اللَّهُمَّ إِيَّاكَ نَعْبُدُ وَلَكَ نُصَلِّي وَنَسْجُدُ وَإِلَيْكَ نَسْعَى وَنَحْفِدُ نَرْجُو رَحْمَتَكَ وَنَخْشَى عَذَابَكَ إِنَّ عَذَابَكَ بِالْكُفَّارِ مُلْحِقٌ",
+            translitLatin = "Allohumma inna nasta‘iynuka va nastag‘firuk, va nu’minu bika va natavakkalu ‘alayk, va nusniy ‘alaykal xoyr, nashkuruka va la nakfuruk, va naxla‘u va natruku may-yafjuruk. Allohumma iyyaka na‘budu va laka nusolliy va nasjud, va ilayka nas‘a va nahfid, narju rohmataka va naxsha ‘azabak, inna ‘azabaka bil kuffari mulhiq.",
+            translitCyrillic = "Аллоҳумма инна настаъийнука ва настағфирук, ва нуъмину бика ва натаваккалу ъалайк, ва нусний ъалайкал хойр, нашкурука ва ла накфурук, ва нахлаъу ва натруку май-яфжурук. Аллоҳумма ийяка наъбуду ва лака нусоллий ва насжуд, ва илайка насъа ва наҳфид, наржу роҳматака ва нахша ъазабак, инна ъазабака бил куффари мулҳиқ.",
+            meaning = lText(
+                "Allohim, Sendan madad va mag‘firat so‘raymiz, Senga iymon keltirib tavakkal qilamiz, Senga barcha yaxshilik bilan hamd aytamiz, Senga shukr qilib kufr keltirmaymiz va Senga osiylik qiluvchidan yuz o‘giramiz. Allohim, Sengagina ibodat qilamiz, Sen uchungina namoz o‘qiymiz va sajda qilamiz, Senga tomon intilamiz va shoshilamiz, rahmatingdan umidvor bo‘lib azobingdan qo‘rqamiz. Albatta, Sening azobing kofirlarga yetguvchidir.",
+                "Аллоҳим, Сендан мадад ва мағфират сўраймиз, Сенга иймон келтириб таваккал қиламиз, Сенга барча яхшилик билан ҳамд айтамиз, Сенга шукр қилиб куфр келтирмаймиз ва Сенга осийлик қилувчидан юз ўгирамиз. Аллоҳим, Сенгагина ибодат қиламиз, Сен учунгина намоз ўқиймиз ва сажда қиламиз, Сенга томон интиламиз ва шошиламиз, раҳматингдан умидвор бўлиб азобингдан қўрқамиз. Албатта, Сенинг азобинг кофирларга етгувчидир."
+            ),
+            ttsPrompt = "Allohumma inna nasta'iynuka va nastag'firuk, va nu'minu bika va natavakkalu alayk, va nusniy alaykal xoyr, nashkuruka va la nakfuruk, va naxla'u va natruku may yafjuruk. Allohumma iyyaka na'budu va laka nusolliy va nasjud, va ilayka nas'a va nahfid, narju rohmataka va naxsha azabak, inna azabaka bil kuffari mulhiq.",
+            audioAssetId = "qunut"
         )
     )
+
+    fun findSurahById(id: String): SurahLibraryItem =
+        surahs.first { it.id == id }
 
     val postureGuides: List<PostureGuideItem> = listOf(
         PostureGuideItem(

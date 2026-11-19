@@ -20,11 +20,13 @@ class DailyPrayerScheduleSyncWorker(
     override suspend fun doWork(): Result {
         val prefs = UserPreferencesRepository(applicationContext)
         val settings = prefs.settingsFlow.first()
+        val db = SajdaDatabase.getInstance(applicationContext)
         val calendarRepo = PrayerCalendarRepository(
-            applicationContext,
-            SajdaDatabase.getInstance(applicationContext).prayerCalendarDao()
+            context = applicationContext,
+            dao = db.prayerCalendarDao(),
+            syncMetadataDao = db.prayerSyncMetadataDao()
         )
-        calendarRepo.syncFromNetworkIfConnected(settings.selectedCityId)
+        calendarRepo.syncCityPrayerTimes(settings.selectedCityId)
         val (todayDay, tomorrowDay) = calendarRepo.getTodayAndTomorrow(settings.selectedCityId)
         PrayerWorkScheduler(applicationContext).syncAllPrayers(
             settings = settings,

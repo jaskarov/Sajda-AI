@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PlayArrow
@@ -95,6 +96,7 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     onOpenWeeklyStats: () -> Unit = {},
     onOpenWuduGuide: () -> Unit = {},
+    onOpenPrayerGuide: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -125,7 +127,8 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 600.dp)
-                .align(Alignment.TopCenter),
+                .align(Alignment.TopCenter)
+                .testTag("home_prayer_list"),
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -378,6 +381,72 @@ fun HomeScreen(
                         }
                         Text(
                             text = lText("Ochish", "Очиш").get(script),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            // Interactive Step-by-Step Prayer Guide (Onboarding Walkthrough)
+            item {
+                Card(
+                    onClick = onOpenPrayerGuide,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_open_prayer_guide_button")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.MenuBook,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = lText(
+                                    "Namoz o‘qish tartibi (6 qadam)",
+                                    "Намоз ўқиш тартиби (6 қадам)"
+                                ).get(script),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = lText(
+                                    "Takbirdan salomgacha jonli animatsiya va ovozli qo‘llanma",
+                                    "Такбирдан саломгача жонли анимация ва овозли қўлланма"
+                                ).get(script),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = lText("Ko‘rish", "Кўриш").get(script),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary

@@ -19,10 +19,13 @@ import com.example.data.local.PrayerCalendarDayEntity
 import com.example.data.local.PrayerCalendarRepository
 import com.example.data.local.PrayerHistoryEntity
 import com.example.data.local.PrayerHistoryRepository
+import com.example.data.local.PrayerSyncMetadataEntity
+import com.example.data.local.PrayerSyncOutcome
 import com.example.data.local.QazoPrayerEntity
 import com.example.data.local.QazoPrayerRepository
 import com.example.data.local.SajdaBackupManager
 import com.example.data.local.SajdaDatabase
+import com.example.data.remote.RemoteUzbekistanPrayerTimesService
 import com.example.data.preferences.UserPreferencesRepository
 import com.example.data.preferences.UserSettings
 import com.example.domain.engine.GetPrayerTimesUseCase
@@ -75,7 +78,10 @@ data class MainUiState(
     val ttsReadiness: com.example.audio.TtsReadinessInfo = com.example.audio.TtsReadinessInfo(),
     val calendarSource: String = "uz_taqvim_365",
     val lastCalendarSyncMillis: Long = 0L,
+    val cachedCalendarDaysCount: Int = 0,
+    val monthlyCalendarDays: List<PrayerCalendarDayEntity> = emptyList(),
     val isCalendarSyncing: Boolean = false,
+    val calendarSyncStatusMessage: com.example.domain.model.LText? = null,
     val backupStatusMessage: com.example.domain.model.LText? = null,
     val tahoratAutoPlayActive: Boolean = false,
     val activeTahoratStepId: String? = null,
@@ -92,8 +98,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         database.dailyPrayerProgressDao()
     )
     private val calendarRepo = PrayerCalendarRepository(
-        application,
-        database.prayerCalendarDao()
+        context = application,
+        dao = database.prayerCalendarDao(),
+        syncMetadataDao = database.prayerSyncMetadataDao()
     )
     private val qazoRepo = QazoPrayerRepository(database.qazoPrayerDao())
     private val backupManager = SajdaBackupManager(prefsRepo, historyRepo, qazoRepo)
@@ -105,6 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val tickerFlow = MutableStateFlow(System.currentTimeMillis())
     private val weekOffsetFlow = MutableStateFlow(0)
     private val calendarSyncingFlow = MutableStateFlow(false)
+    private val calendarSyncStatusFlow = MutableStateFlow<com.example.domain.model.LText?>(null)
     private val backupStatusMessageFlow = MutableStateFlow<com.example.domain.model.LText?>(null)
     private val tahoratAutoPlayFlow = MutableStateFlow<Pair<Boolean, String?>>(false to null)
     private var tahoratAutoPlayJob: kotlinx.coroutines.Job? = null
@@ -119,27 +127,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val calendarPairFlow = prefsRepo.settingsFlow
-        .map { it.selectedCityId }
-        .distinctUntilChanged()
-        .flatMapLatest { cityId ->
-            combine(
-                calendarRepo.observeTodayAndTomorrow(cityId),
-                calendarRepo.observeLatestSyncMillis(cityId),
-                calendarSyncingFlow
-            ) { pair, latestSync, syncing ->
-                CalendarBundle(
-                    todayDay = pair.first,
-                    tomorrowDay = pair.second,
-                    latestSyncMillis = latestSync ?: 0L,
-                    isSyncing = syncing
-                )
-            }
-        }
-
     private val currentDayKeyFlow = tickerFlow
         .map { PrayerHistoryRepository.formatDayKey(java.util.Date(it)) }
         .distinctUntilChanged()
+
+    private val calendarPairFlow = combine(
+        prefsRepo.settingsFlow.map { it.selectedCityId }.distinctUntilChanged(),
+        currentDayKeyFlow
+    ) { cityId, dayKey -> cityId to dayKey }
+        .flatMapLatest { (cityId, _) ->
+            val nowMs = System.currentTimeMillis()
+            val cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent")).apply {
+                timeInMillis = nowMs
+            }
+            val year = cal.get(java.util.Calendar.YEAR)
+            val month = cal.get(java.util.Calendar.MONTH) + 1
+
+            val syncMetaFlow = combine(
+                calendarRepo.observeLatestSyncMillis(cityId),
+                calendarRepo.observeSyncMetadata(cityId),
+                calendarRepo.observeCachedDayCount(cityId),
+                calendarSyncingFlow,
+                calendarSyncStatusFlow
+            ) { latestSync, metadata, cachedCount, syncing, statusMsg ->
+                SyncMetaBundle(
+                    latestSyncMillis = maxOf(latestSync ?: 0L, metadata?.lastSyncedAtMillis ?: 0L),
+                    metadata = metadata,
+                    cachedDaysCount = cachedCount,
+                    isSyncing = syncing,
+                    statusMessage = statusMsg
+                )
+            }
+
+            combine(
+                calendarRepo.observeTodayAndTomorrow(cityId, nowMs),
+                calendarRepo.observeMonthSchedule(cityId, year, month),
+                syncMetaFlow
+            ) { pair, monthDays, meta ->
+                CalendarBundle(
+                    todayDay = pair.first,
+                    tomorrowDay = pair.second,
+                    monthlyDays = monthDays,
+                    latestSyncMillis = meta.latestSyncMillis,
+                    cachedDaysCount = meta.cachedDaysCount,
+                    metadata = meta.metadata,
+                    isSyncing = meta.isSyncing,
+                    syncStatusMessage = meta.statusMessage
+                )
+            }
+        }
 
     private val progressAndStatsFlow = combine(
         historyRepo.observeTodayProgress(currentDayKeyFlow),
@@ -210,9 +246,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             hasCompassSensor = true,
             audioStatus = audioCoach.status.value,
             ttsReadiness = ttsReadiness,
-            calendarSource = dbBundle.calendarBundle.todayDay?.source ?: "uz_taqvim_365",
+            calendarSource = dbBundle.calendarBundle.todayDay?.source
+                ?: dbBundle.calendarBundle.metadata?.provider
+                ?: "uz_taqvim_365",
             lastCalendarSyncMillis = dbBundle.calendarBundle.latestSyncMillis,
+            cachedCalendarDaysCount = dbBundle.calendarBundle.cachedDaysCount,
+            monthlyCalendarDays = dbBundle.calendarBundle.monthlyDays,
             isCalendarSyncing = dbBundle.calendarBundle.isSyncing,
+            calendarSyncStatusMessage = dbBundle.calendarBundle.syncStatusMessage,
             backupStatusMessage = backupMsg,
             tahoratAutoPlayActive = tahoratPair.first,
             activeTahoratStepId = tahoratPair.second,
@@ -279,9 +320,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (calendarSyncingFlow.value) return@launch
             calendarSyncingFlow.value = true
+            calendarSyncStatusFlow.value = null
             try {
                 val settings = prefsRepo.settingsFlow.first()
-                calendarRepo.syncFromNetworkIfConnected(settings.selectedCityId)
+                val outcome = calendarRepo.syncCityPrayerTimes(settings.selectedCityId)
+                calendarSyncStatusFlow.value = when (outcome) {
+                    is PrayerSyncOutcome.Synced -> {
+                        val providerLabel = when (outcome.provider) {
+                            RemoteUzbekistanPrayerTimesService.PROVIDER_ISLOM_API -> "Islom.uz"
+                            RemoteUzbekistanPrayerTimesService.PROVIDER_ALADHAN -> "Aladhan"
+                            else -> outcome.provider
+                        }
+                        com.example.domain.model.lText(
+                            "Yangilandi ($providerLabel): ${outcome.fetchedDaysCount} kun yuklandi • ${outcome.totalCachedDays} kun oflayn Room bazasida",
+                            "Янгиланди ($providerLabel): ${outcome.fetchedDaysCount} кун юкланди • ${outcome.totalCachedDays} кун офлайн Room базасида"
+                        )
+                    }
+                    is PrayerSyncOutcome.OfflineCacheReady -> {
+                        com.example.domain.model.lText(
+                            "Oflayn rejim faol — ${outcome.totalCachedDays} kunlik jadval mahalliy Room bazasidan ishlamoqda",
+                            "Офлайн режим фаол — ${outcome.totalCachedDays} кунлик жадвал маҳаллий Room базасидан ишламоқда"
+                        )
+                    }
+                }
                 rescheduleAlarms()
             } finally {
                 calendarSyncingFlow.value = false
@@ -581,11 +642,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         audioCoach.release()
     }
 
+    private data class SyncMetaBundle(
+        val latestSyncMillis: Long,
+        val metadata: PrayerSyncMetadataEntity?,
+        val cachedDaysCount: Int,
+        val isSyncing: Boolean,
+        val statusMessage: com.example.domain.model.LText?
+    )
+
     private data class CalendarBundle(
         val todayDay: PrayerCalendarDayEntity?,
         val tomorrowDay: PrayerCalendarDayEntity?,
+        val monthlyDays: List<PrayerCalendarDayEntity>,
         val latestSyncMillis: Long,
-        val isSyncing: Boolean
+        val cachedDaysCount: Int,
+        val metadata: PrayerSyncMetadataEntity?,
+        val isSyncing: Boolean,
+        val syncStatusMessage: com.example.domain.model.LText?
     )
 
     private data class StatsBundle(
