@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -228,19 +229,22 @@ fun ActivePrayerScreen(
         )
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(ObsidianBackground)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
+        val isShortScreen = maxHeight < 580.dp
+        val verticalGap = if (isShortScreen) 5.dp else 10.dp
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 640.dp)
                 .align(Alignment.TopCenter)
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(horizontal = 14.dp, vertical = if (isShortScreen) 6.dp else 10.dp),
+            verticalArrangement = Arrangement.spacedBy(verticalGap)
         ) {
             // Top Header: Rakat | Expected Pose | Exit
             Surface(
@@ -251,7 +255,10 @@ fun ActivePrayerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(
+                            horizontal = 12.dp,
+                            vertical = if (isShortScreen) 2.dp else 8.dp
+                        ),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -435,7 +442,10 @@ fun ActivePrayerScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(
+                                horizontal = 12.dp,
+                                vertical = if (isShortScreen) 4.dp else 8.dp
+                            ),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -447,13 +457,16 @@ fun ActivePrayerScreen(
                             style = MaterialTheme.typography.labelMedium,
                             color = Color(0xFFFFE7A8),
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = if (isShortScreen) 1 else 2,
                             modifier = Modifier.weight(1f)
                         )
                         if (uiState.consecutiveStuckRescues >= 1) {
                             Spacer(Modifier.width(8.dp))
                             OutlinedButton(
                                 onClick = onSwitchToAudioOnly,
-                                border = BorderStroke(1.dp, PoseWarningAmber)
+                                border = BorderStroke(1.dp, PoseWarningAmber),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                modifier = Modifier.height(if (isShortScreen) 32.dp else 38.dp)
                             ) {
                                 Text(
                                     text = lText("Audio", "Аудио").get(script),
@@ -472,8 +485,9 @@ fun ActivePrayerScreen(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                val isCompactHeight = maxHeight < 360.dp
-                val isVeryShort = maxHeight < 250.dp
+                val contentMaxHeight = maxHeight
+                val isCompactHeight = contentMaxHeight < 360.dp
+                val isVeryShort = contentMaxHeight < 250.dp
                 val isCameraLive = uiState.mode == CoachMode.CAMERA_AI && hasCameraPermission
 
                 val arabicFontSize = when {
@@ -494,7 +508,7 @@ fun ActivePrayerScreen(
 
                 Column(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(if (isShortScreen) 5.dp else 8.dp)
                 ) {
                     // Compact Top Utility Strip: Pose Status + Teleprompter Toggle + Camera Controls
                     if (isCameraLive) {
@@ -588,8 +602,9 @@ fun ActivePrayerScreen(
 
                                 OutlinedButton(
                                     onClick = onSwitchToAudioOnly,
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                                     modifier = Modifier
-                                        .height(36.dp)
+                                        .height(34.dp)
                                         .testTag("active_switch_audio_button"),
                                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
                                 ) {
@@ -601,18 +616,26 @@ fun ActivePrayerScreen(
                                 }
                             }
                         } else {
-                            // Compact Top Camera PiP Strip (never squishes recitation card below)
-                            val pipHeight: Dp = if (isCompactHeight) 92.dp else 112.dp
-                            val pipWidth: Dp = if (isCompactHeight) 82.dp else 96.dp
+                            // Compact Top Camera PiP Strip (scales gracefully on compact/split-screen heights)
+                            val pipHeight: Dp = when {
+                                isShortScreen || contentMaxHeight < 210.dp -> 62.dp
+                                isCompactHeight -> 86.dp
+                                else -> 112.dp
+                            }
+                            val pipWidth: Dp = when {
+                                isShortScreen || contentMaxHeight < 210.dp -> 58.dp
+                                isCompactHeight -> 78.dp
+                                else -> 96.dp
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .size(width = pipWidth, height = pipHeight)
-                                        .clip(RoundedCornerShape(16.dp))
+                                        .clip(RoundedCornerShape(14.dp))
                                         .background(Color.Black)
                                 ) {
                                     CameraPosePreview(
@@ -631,7 +654,7 @@ fun ActivePrayerScreen(
                                         color = Color.Black.copy(alpha = 0.65f),
                                         modifier = Modifier
                                             .align(Alignment.BottomCenter)
-                                            .padding(4.dp)
+                                            .padding(3.dp)
                                     ) {
                                         Text(
                                             text = if (hasLiveSkeleton) {
@@ -641,7 +664,7 @@ fun ActivePrayerScreen(
                                             },
                                             fontSize = 9.sp,
                                             color = if (hasLiveSkeleton) PoseMatchedGreen else Color.White,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                                             maxLines = 1
                                         )
                                     }
@@ -649,7 +672,7 @@ fun ActivePrayerScreen(
 
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(if (isShortScreen) 4.dp else 6.dp)
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
@@ -665,7 +688,10 @@ fun ActivePrayerScreen(
                                             .testTag("active_pose_status_chip")
                                     ) {
                                         Column(
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier.padding(
+                                                horizontal = 10.dp,
+                                                vertical = if (isShortScreen) 3.dp else 6.dp
+                                            ),
                                             verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
                                             Text(
@@ -675,21 +701,23 @@ fun ActivePrayerScreen(
                                                 fontWeight = FontWeight.Bold,
                                                 maxLines = 1
                                             )
-                                            Text(
-                                                text = when {
-                                                    step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
-                                                        uiState.salamProgressStage == 1 -> lText(
-                                                        "1-yelka ✓ • Narigi buring",
-                                                        "1-елка ✓ • Нариги буринг"
-                                                    ).get(script)
-                                                    isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
-                                                    isSeatedMode -> lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
-                                                    else -> lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
-                                                },
-                                                fontSize = 11.sp,
-                                                color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
-                                                maxLines = 1
-                                            )
+                                            if (!isShortScreen) {
+                                                Text(
+                                                    text = when {
+                                                        step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
+                                                            uiState.salamProgressStage == 1 -> lText(
+                                                            "1-yelka ✓ • Narigi buring",
+                                                            "1-елка ✓ • Нариги буринг"
+                                                        ).get(script)
+                                                        isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
+                                                        isSeatedMode -> lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
+                                                        else -> lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
+                                                    },
+                                                    fontSize = 11.sp,
+                                                    color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
                                     }
 
@@ -748,8 +776,9 @@ fun ActivePrayerScreen(
 
                                         OutlinedButton(
                                             onClick = onSwitchToAudioOnly,
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                                             modifier = Modifier
-                                                .height(36.dp)
+                                                .height(if (isShortScreen) 32.dp else 36.dp)
                                                 .testTag("active_switch_audio_button"),
                                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
                                         ) {
@@ -831,8 +860,11 @@ fun ActivePrayerScreen(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                .padding(
+                                    horizontal = 16.dp,
+                                    vertical = if (isShortScreen) 8.dp else 14.dp
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(if (isShortScreen) 6.dp else 10.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -933,7 +965,10 @@ fun ActivePrayerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(
+                            horizontal = 14.dp,
+                            vertical = if (isShortScreen) 6.dp else 10.dp
+                        ),
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
@@ -943,15 +978,17 @@ fun ActivePrayerScreen(
                     )
                     Text(
                         text = step.coachInstruction.get(script),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = if (isShortScreen) MaterialTheme.typography.bodyMedium
+                        else MaterialTheme.typography.titleMedium,
                         color = Color.White,
                         fontWeight = FontWeight.SemiBold,
-                        maxLines = 2
+                        maxLines = if (isShortScreen) 1 else 2
                     )
                 }
             }
 
             // Bottom Pause / Next Buttons
+            val actionButtonHeight = if (isShortScreen) 48.dp else 52.dp
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -960,7 +997,7 @@ fun ActivePrayerScreen(
                     onClick = onTogglePause,
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(actionButtonHeight)
                         .testTag("pause_resume_button"),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.5.dp, Color.White.copy(alpha = 0.45f)),
@@ -986,7 +1023,7 @@ fun ActivePrayerScreen(
                     onClick = onNextStep,
                     modifier = Modifier
                         .weight(1f)
-                        .height(52.dp)
+                        .height(actionButtonHeight)
                         .testTag("next_step_button"),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(

@@ -15,18 +15,33 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 -keep,includedescriptorclasses class com.example.data.local.**$$serializer { *; }
+-keep,includedescriptorclasses class com.example.data.remote.**$$serializer { *; }
 -keep,includedescriptorclasses class com.example.ui.navigation.**$$serializer { *; }
 -keepclassmembers class com.example.data.local.** {
+    *** Companion;
+}
+-keepclassmembers class com.example.data.remote.** {
     *** Companion;
 }
 -keepclassmembers class com.example.ui.navigation.** {
     *** Companion;
 }
+-keep class com.example.data.remote.**Dto { *; }
+-keep interface com.example.data.remote.UzbekistanPrayerTimesApi { *; }
+
+# WorkManager Workers & BroadcastReceivers
+-keep class com.example.alarm.** extends androidx.work.CoroutineWorker { *; }
+-keep class com.example.alarm.** extends android.content.BroadcastReceiver { *; }
 
 # Room Database Entities, DAOs, and Generated Implementations
 -keep class * extends androidx.room.RoomDatabase
 -keep @androidx.room.Entity class *
 -dontwarn androidx.room.paging.**
+
+# Retrofit & OkHttp
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn retrofit2.**
 
 # ML Kit Pose Detection & Vision Common
 -keep class com.google.mlkit.vision.pose.** { *; }
