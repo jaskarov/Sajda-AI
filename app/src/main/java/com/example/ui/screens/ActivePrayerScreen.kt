@@ -36,8 +36,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -60,6 +62,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,6 +116,7 @@ fun ActivePrayerScreen(
     onExtendContinuation: () -> Unit = {},
     onSwitchToAudioOnly: () -> Unit,
     onSwitchToCamera: () -> Unit,
+    onToggleCameraFacing: () -> Unit = {},
     onLifecyclePause: () -> Unit = {},
     onExit: () -> Unit
 ) {
@@ -210,6 +214,19 @@ fun ActivePrayerScreen(
         }
     }
     val hasLiveSkeleton = uiState.poseSnapshot.landmarks.isNotEmpty()
+    // 2-Meter Teleprompter (Katta matn) mode defaults ON for large-text, seated/senior, and Audio-Only users,
+    // and can be toggled anytime during Camera AI mode without stopping pose analysis.
+    var isTeleprompterMode by rememberSaveable(
+        uiState.settings.largeTextMode,
+        uiState.settings.seatedPrayerMode,
+        uiState.mode
+    ) {
+        mutableStateOf(
+            uiState.settings.largeTextMode ||
+                uiState.settings.seatedPrayerMode ||
+                uiState.mode == CoachMode.AUDIO_ONLY
+        )
+    }
 
     Box(
         modifier = Modifier
@@ -405,170 +422,445 @@ fun ActivePrayerScreen(
                 }
             }
 
-            // Main Content Area: PiP Camera + Synchronized Responsive Recitation Text
+            // Stuck-Pose Auto-Rescue Notice in Camera AI mode
+            if (uiState.mode == CoachMode.CAMERA_AI && uiState.stuckPoseRescueCountdownSec > 0) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = PoseWarningAmber.copy(alpha = 0.22f),
+                    border = BorderStroke(1.dp, PoseWarningAmber.copy(alpha = 0.75f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("stuck_pose_rescue_banner")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = lText(
+                                "Holat aniqlanmadi • ${uiState.stuckPoseRescueCountdownSec} soniyada avtomatik davom etadi",
+                                "Ҳолат аниқланмади • ${uiState.stuckPoseRescueCountdownSec} сонияда автоматик давом этади"
+                            ).get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color(0xFFFFE7A8),
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (uiState.consecutiveStuckRescues >= 1) {
+                            Spacer(Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = onSwitchToAudioOnly,
+                                border = BorderStroke(1.dp, PoseWarningAmber)
+                            ) {
+                                Text(
+                                    text = lText("Audio", "Аудио").get(script),
+                                    color = Color(0xFFFFE7A8),
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Main Content Area: Full-Width 2-Meter Teleprompter + Compact Collapsible Camera Strip
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
                 val isCompactHeight = maxHeight < 360.dp
-                val isVeryShort = maxHeight < 260.dp
-                val isNarrowWidth = maxWidth < 340.dp
-                val panelWidth: Dp = if (isNarrowWidth) 120.dp else 138.dp
-                val previewHeight: Dp = when {
-                    isVeryShort -> 92.dp
-                    isCompactHeight -> 156.dp
-                    else -> 196.dp
+                val isVeryShort = maxHeight < 250.dp
+                val isCameraLive = uiState.mode == CoachMode.CAMERA_AI && hasCameraPermission
+
+                val arabicFontSize = when {
+                    isVeryShort -> 20.sp
+                    isTeleprompterMode -> if (uiState.settings.largeTextMode || isSeatedMode) 30.sp else 27.sp
+                    isCompactHeight -> 21.sp
+                    else -> 24.sp
                 }
+                val arabicLineHeight = (arabicFontSize.value * 1.42f).sp
 
-                val arabicFontSize = if (isCompactHeight) 19.sp else 23.sp
-                val arabicLineHeight = if (isCompactHeight) 29.sp else 34.sp
-                val translitFontSize = if (isCompactHeight) 16.sp else 19.sp
-                val translitLineHeight = if (isCompactHeight) 23.sp else 28.sp
+                val translitFontSize = when {
+                    isVeryShort -> 18.sp
+                    isTeleprompterMode -> if (uiState.settings.largeTextMode || isSeatedMode) 30.sp else 26.sp
+                    isCompactHeight -> 19.sp
+                    else -> 22.sp
+                }
+                val translitLineHeight = (translitFontSize.value * 1.38f).sp
 
-                Row(
+                Column(
                     modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Left Mini Camera + Skeleton OR Audio Pulse Panel
-                    Column(
-                        modifier = Modifier
-                            .width(panelWidth)
-                            .fillMaxHeight()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        if (uiState.mode == CoachMode.CAMERA_AI && hasCameraPermission) {
-                            Box(
-                                modifier = Modifier
-                                    .size(width = panelWidth, height = previewHeight)
-                                    .clip(RoundedCornerShape(18.dp))
-                                    .background(Color.Black)
+                    // Compact Top Utility Strip: Pose Status + Teleprompter Toggle + Camera Controls
+                    if (isCameraLive) {
+                        if (isTeleprompterMode) {
+                            // Keep CameraX Pose Analysis mounted silently (1dp) while showing huge full-width text
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                CameraPosePreview(
-                                    darkLuminanceThreshold = uiState.settings.darkRoomLuminanceThreshold,
-                                    onPoseResult = onPoseResult,
-                                    poseSnapshot = uiState.poseSnapshot,
-                                    showSkeleton = true,
-                                    isMatched = isPoseAligned,
-                                    seatedMode = isSeatedMode,
-                                    lowPowerMode = uiState.settings.lowPowerCameraMode,
-                                    modifier = Modifier.fillMaxSize()
-                                )
+                                Box(modifier = Modifier.size(1.dp)) {
+                                    CameraPosePreview(
+                                        darkLuminanceThreshold = uiState.settings.darkRoomLuminanceThreshold,
+                                        onPoseResult = onPoseResult,
+                                        poseSnapshot = uiState.poseSnapshot,
+                                        showSkeleton = false,
+                                        isMatched = isPoseAligned,
+                                        seatedMode = isSeatedMode,
+                                        lowPowerMode = uiState.settings.lowPowerCameraMode,
+                                        useFrontCamera = uiState.useFrontCamera,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
 
-                                // Skeleton Overlay status badge
                                 Surface(
-                                    shape = CircleShape,
-                                    color = Color.Black.copy(alpha = 0.65f),
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.2f)
+                                    else ObsidianSurfaceVariant,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.65f)
+                                        else Color.White.copy(alpha = 0.14f)
+                                    ),
                                     modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(6.dp)
+                                        .weight(1f)
+                                        .testTag("active_pose_status_chip")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "${detectedPose.title.get(script)} • ${
+                                                when {
+                                                    step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
+                                                        uiState.salamProgressStage == 1 -> lText(
+                                                        "1-yelka ✓",
+                                                        "1-елка ✓"
+                                                    ).get(script)
+                                                    isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
+                                                    isSeatedMode -> lText("Stulda", "Стулда").get(script)
+                                                    else -> lText("AI faol", "AI фаол").get(script)
+                                                }
+                                            }",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (isPoseAligned) PoseMatchedGreen else NightGold,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = { isTeleprompterMode = false },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = ObsidianSurfaceVariant,
+                                    border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.55f)),
+                                    modifier = Modifier.testTag("active_teleprompter_toggle")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Videocam,
+                                            contentDescription = null,
+                                            tint = NightEmeraldPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = lText("Kamera", "Камера").get(script),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = NightEmeraldPrimary,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = onSwitchToAudioOnly,
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .testTag("active_switch_audio_button"),
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
                                 ) {
                                     Text(
-                                        text = if (hasLiveSkeleton) {
-                                            lText("Skelet faol", "Скелет фаол").get(script)
-                                        } else {
-                                            lText("Tana kutilmoqda", "Тана кутилмоқда").get(script)
-                                        },
-                                        fontSize = 10.sp,
-                                        color = if (hasLiveSkeleton) PoseMatchedGreen else Color.White,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                        maxLines = 1
+                                        text = lText("Audio", "Аудио").get(script),
+                                        color = Color.White,
+                                        fontSize = 12.sp
                                     )
                                 }
-                            }
-
-                            // Clean friendly pose status chip (no confusing technical angles)
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.18f)
-                                else ObsidianSurfaceVariant,
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.6f)
-                                    else Color.White.copy(alpha = 0.12f)
-                                ),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("active_pose_status_chip")
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Text(
-                                        text = detectedPose.title.get(script),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (isPoseAligned) PoseMatchedGreen else NightGold,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = when {
-                                            step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
-                                                uiState.salamProgressStage == 1 -> lText(
-                                                "1-yelka ✓ • Narigi buring",
-                                                "1-елка ✓ • Нариги буринг"
-                                            ).get(script)
-                                            isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
-                                            isSeatedMode -> lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
-                                            else -> lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
-                                        },
-                                        fontSize = 10.sp,
-                                        color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = onSwitchToAudioOnly,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(40.dp)
-                                    .testTag("active_switch_audio_button"),
-                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
-                            ) {
-                                Text(
-                                    text = lText("Audio", "Аудио").get(script),
-                                    color = Color.White,
-                                    fontSize = 12.sp
-                                )
                             }
                         } else {
-                            AudioPulseCard(
-                                width = panelWidth,
-                                height = previewHeight,
-                                remainingSec = uiState.audioOnlyRemainingSec,
-                                isPaused = uiState.isPaused,
-                                script = script
-                            )
+                            // Compact Top Camera PiP Strip (never squishes recitation card below)
+                            val pipHeight: Dp = if (isCompactHeight) 92.dp else 112.dp
+                            val pipWidth: Dp = if (isCompactHeight) 82.dp else 96.dp
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(width = pipWidth, height = pipHeight)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Color.Black)
+                                ) {
+                                    CameraPosePreview(
+                                        darkLuminanceThreshold = uiState.settings.darkRoomLuminanceThreshold,
+                                        onPoseResult = onPoseResult,
+                                        poseSnapshot = uiState.poseSnapshot,
+                                        showSkeleton = true,
+                                        isMatched = isPoseAligned,
+                                        seatedMode = isSeatedMode,
+                                        lowPowerMode = uiState.settings.lowPowerCameraMode,
+                                        useFrontCamera = uiState.useFrontCamera,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = Color.Black.copy(alpha = 0.65f),
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(4.dp)
+                                    ) {
+                                        Text(
+                                            text = if (hasLiveSkeleton) {
+                                                lText("Skelet", "Скелет").get(script)
+                                            } else {
+                                                lText("Kutilmoqda", "Кутилмоқда").get(script)
+                                            },
+                                            fontSize = 9.sp,
+                                            color = if (hasLiveSkeleton) PoseMatchedGreen else Color.White,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.18f)
+                                        else ObsidianSurfaceVariant,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isPoseAligned) PoseMatchedGreen.copy(alpha = 0.6f)
+                                            else Color.White.copy(alpha = 0.12f)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("active_pose_status_chip")
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        ) {
+                                            Text(
+                                                text = detectedPose.title.get(script),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = if (isPoseAligned) PoseMatchedGreen else NightGold,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                            Text(
+                                                text = when {
+                                                    step.expectedPose == com.example.domain.model.PrayerPose.SALAM &&
+                                                        uiState.salamProgressStage == 1 -> lText(
+                                                        "1-yelka ✓ • Narigi buring",
+                                                        "1-елка ✓ • Нариги буринг"
+                                                    ).get(script)
+                                                    isPoseAligned -> lText("Tasdiqlandi ✓", "Тасдиқланди ✓").get(script)
+                                                    isSeatedMode -> lText("Stulda • Imo-ishora", "Стулда • Имо-ишора").get(script)
+                                                    else -> lText("Holat kutilmoqda", "Ҳолат кутилмоқда").get(script)
+                                                },
+                                                fontSize = 11.sp,
+                                                color = if (isPoseAligned) PoseMatchedGreen else Color.White.copy(alpha = 0.78f),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            onClick = { isTeleprompterMode = true },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = NightGold.copy(alpha = 0.16f),
+                                            border = BorderStroke(1.dp, NightGold.copy(alpha = 0.6f)),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .testTag("active_teleprompter_toggle")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.FormatSize,
+                                                    contentDescription = null,
+                                                    tint = NightGold,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(Modifier.width(4.dp))
+                                                Text(
+                                                    text = lText("2m Matn", "2м Матн").get(script),
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = NightGold,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        }
+
+                                        Surface(
+                                            onClick = onToggleCameraFacing,
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = ObsidianSurfaceVariant,
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                                            modifier = Modifier.testTag("active_flip_camera_button")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Cameraswitch,
+                                                contentDescription = lText("Kamerani almashtirish", "Камерани алмаштириш").get(script),
+                                                tint = Color.White,
+                                                modifier = Modifier
+                                                    .padding(8.dp)
+                                                    .size(18.dp)
+                                            )
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = onSwitchToAudioOnly,
+                                            modifier = Modifier
+                                                .height(36.dp)
+                                                .testTag("active_switch_audio_button"),
+                                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                                        ) {
+                                            Text(
+                                                text = lText("Audio", "Аудио").get(script),
+                                                color = Color.White,
+                                                fontSize = 12.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Compact Audio-Only Timer Strip (keeps recitation card 100% full width)
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = ObsidianSurfaceVariant,
+                            border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.45f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.GraphicEq,
+                                        contentDescription = null,
+                                        tint = NightEmeraldPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = if (uiState.isPaused) {
+                                            lText("Pauzada", "Паузада").get(script)
+                                        } else {
+                                            lText(
+                                                "2m Katta matn • Audio taymer",
+                                                "2м Катта матн • Аудио таймер"
+                                            ).get(script)
+                                        },
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Text(
+                                    text = "${uiState.audioOnlyRemainingSec} s",
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NightGold
+                                )
+                            }
                         }
                     }
 
-                    // Right: Responsive Scrollable Surah & Audio-Synchronized Words
+                    // Full-Width High-Contrast Recitation Card (readable from 2 meters on joynamoz / chair)
                     Card(
                         modifier = Modifier
+                            .fillMaxWidth()
                             .weight(1f)
-                            .fillMaxHeight(),
+                            .testTag("active_teleprompter_card"),
                         shape = RoundedCornerShape(22.dp),
                         colors = CardDefaults.cardColors(containerColor = ObsidianSurface),
-                        border = BorderStroke(1.dp, NightEmeraldPrimary.copy(alpha = 0.35f))
+                        border = BorderStroke(
+                            width = if (isTeleprompterMode) 1.5.dp else 1.dp,
+                            color = if (isTeleprompterMode) NightGold.copy(alpha = 0.55f)
+                            else NightEmeraldPrimary.copy(alpha = 0.35f)
+                        )
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .verticalScroll(rememberScrollState())
-                                .padding(14.dp),
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = step.recitationTitle.get(script),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = NightGold,
-                                letterSpacing = 0.8.sp
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = step.recitationTitle.get(script),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = NightGold,
+                                    letterSpacing = 0.6.sp,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (isTeleprompterMode) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = NightGold.copy(alpha = 0.16f)
+                                    ) {
+                                        Text(
+                                            text = lText("2m Katta matn", "2м Катта матн").get(script),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = NightGold,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                            }
 
                             SurahRecitationVisualizer(
                                 progress = uiState.playbackProgress,
@@ -588,7 +880,7 @@ fun ActivePrayerScreen(
                                 modifier = Modifier.fillMaxWidth()
                             )
 
-                            // Audio-synchronized word-by-word coloring
+                            // Audio-synchronized word-by-word high-contrast coloring
                             val words = step.getWords(script)
                             val highlightedCount = (words.size * uiState.playbackProgress)
                                 .roundToInt()
@@ -600,7 +892,7 @@ fun ActivePrayerScreen(
                                     withStyle(
                                         SpanStyle(
                                             color = if (isSpoken) NightGold else Color.White,
-                                            fontWeight = if (isSpoken) FontWeight.Bold else FontWeight.Medium
+                                            fontWeight = if (isSpoken || isTeleprompterMode) FontWeight.Bold else FontWeight.Medium
                                         )
                                     ) {
                                         append(word)
@@ -617,8 +909,9 @@ fun ActivePrayerScreen(
 
                             Text(
                                 text = step.meaning.get(script),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color.White.copy(alpha = 0.72f)
+                                style = if (isTeleprompterMode) MaterialTheme.typography.bodyMedium
+                                else MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.78f)
                             )
 
                             Spacer(Modifier.height(10.dp))

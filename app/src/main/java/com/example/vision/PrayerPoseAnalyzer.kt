@@ -305,11 +305,9 @@ class PrayerPoseAnalyzer(
             ankle != null && ankle.inFrameLikelihood >= MIN_CONFIDENCE
 
         val isSeated = seatedMode
-        val isFullBodyVisible = if (isSeated) {
-            hasHead && hasTorso
-        } else {
-            hasHead && hasTorso && hasLegs
-        }
+        // Head + torso suffices for reliable pose coaching (supports small rooms & long prayer dresses
+        // where knees/ankles may be veiled or outside the lower frame edge).
+        val isFullBodyVisible = hasHead && hasTorso
 
         val calibrationHint = when {
             isRoomTooDark -> lText(
@@ -324,13 +322,9 @@ class PrayerPoseAnalyzer(
             )
             !hasTorso -> lText(
                 if (isSeated) "Stulda kameraga qarab o‘tiring, yelkangiz va belingiz ko‘rinsin"
-                else "Kameraga ro‘para turing, gavdangiz aniq ko‘rinishi kerak",
+                else "Kameraga ro‘para turing, yelkangiz va belingiz ko‘rinishi yetarli",
                 if (isSeated) "Стулда камерага қараб ўтиринг, елкангиз ва белингиз кўринсин"
-                else "Камерага рўпара туринг, гавдангиз аниқ кўриниши керак"
-            )
-            !isSeated && !hasLegs -> lText(
-                "Oyoq va tizzalaringiz ko‘rinishi uchun 1-2 qadam orqaga suriling",
-                "Оёқ ва тиззаларингиз кўриниши учун 1-2 қадам орқага сурилинг"
+                else "Камерага рўпара туринг, елкангиз ва белингиз кўриниши етарли"
             )
             else -> lText(
                 if (isSeated) "Joyingiz qulay! Stulda tik o‘tirib boshlashingiz mumkin"

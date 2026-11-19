@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         refreshPermissionState()
-        requestStartupCameraAndLocationPermissionsIfNeeded()
 
         enableEdgeToEdge()
         setContent {
@@ -131,20 +130,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestStartupCameraAndLocationPermissionsIfNeeded() {
-        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val alreadyPrompted = prefs.getBoolean(KEY_STARTUP_PERMS_PROMPTED, false)
-        val missing = missingCameraAndLocationPermissions()
-        if (!alreadyPrompted && missing.isNotEmpty()) {
-            prefs.edit().putBoolean(KEY_STARTUP_PERMS_PROMPTED, true).apply()
-            runtimePermissionsLauncher.launch(missing)
-        }
-    }
-
     companion object {
-        private const val PREFS_NAME = "sajda_runtime_permissions"
-        private const val KEY_STARTUP_PERMS_PROMPTED = "startup_camera_location_prompted"
-
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_FINE_LOCATION,

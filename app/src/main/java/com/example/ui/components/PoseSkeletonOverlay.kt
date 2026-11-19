@@ -48,14 +48,15 @@ fun CameraPosePreview(
     isMatched: Boolean = false,
     enabled: Boolean = true,
     seatedMode: Boolean = false,
-    lowPowerMode: Boolean = false
+    lowPowerMode: Boolean = false,
+    useFrontCamera: Boolean = true
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val analyzer = remember(darkLuminanceThreshold) {
         PrayerPoseAnalyzer(
-            isFrontCamera = true,
+            isFrontCamera = useFrontCamera,
             darkLuminanceThreshold = darkLuminanceThreshold,
             seatedMode = seatedMode,
             lowPowerMode = lowPowerMode,
@@ -83,7 +84,7 @@ fun CameraPosePreview(
         }
     }
 
-    DisposableEffect(lifecycleOwner, analyzer, enabled) {
+    DisposableEffect(lifecycleOwner, analyzer, enabled, useFrontCamera) {
         if (!enabled) {
             onDispose { }
         } else {
@@ -121,9 +122,16 @@ fun CameraPosePreview(
                             analysis.setAnalyzer(analysisExecutor, analyzer)
                         }
 
-                    val useFront = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
-                    analyzer.isFrontCamera = useFront
-                    val cameraSelector = if (useFront) {
+                    val hasFront = cameraProvider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)
+                    val hasBack = cameraProvider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)
+                    val actualUseFront = when {
+                        useFrontCamera && hasFront -> true
+                        !useFrontCamera && hasBack -> false
+                        hasFront -> true
+                        else -> false
+                    }
+                    analyzer.isFrontCamera = actualUseFront
+                    val cameraSelector = if (actualUseFront) {
                         CameraSelector.DEFAULT_FRONT_CAMERA
                     } else {
                         CameraSelector.DEFAULT_BACK_CAMERA

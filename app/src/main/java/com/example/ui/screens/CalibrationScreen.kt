@@ -26,17 +26,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Accessible
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Straighten
-import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -46,6 +50,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -90,6 +95,7 @@ fun CalibrationScreen(
     onSpeakCalibrationPrompt: (String) -> Unit,
     onStartActiveSession: (CoachMode, FallbackReason) -> Unit,
     onSeatedModeToggle: (Boolean) -> Unit = {},
+    onToggleCameraFacing: () -> Unit = {},
     onExit: () -> Unit
 ) {
     BackHandler(onBack = onExit)
@@ -145,12 +151,6 @@ fun CalibrationScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!hasCameraPermission && !permissionRequested) {
-            permissionLauncher.launch(Manifest.permission.CAMERA)
-        }
-    }
-
     // Automatic fallback when room is too dark
     LaunchedEffect(uiState.poseSnapshot.isLowLight) {
         if (hasCameraPermission && uiState.poseSnapshot.isLowLight && !releasingForTransition) {
@@ -198,72 +198,143 @@ fun CalibrationScreen(
                 enabled = !releasingForTransition,
                 seatedMode = uiState.settings.seatedPrayerMode,
                 lowPowerMode = uiState.settings.lowPowerCameraMode,
+                useFrontCamera = uiState.useFrontCamera,
                 modifier = Modifier.fillMaxSize()
             )
+
+            // Silhouette Guide Overlay (shown only when camera feed is live)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val rectW = size.width * 0.66f
+                val rectH = size.height * 0.56f
+                val left = (size.width - rectW) / 2f
+                val top = size.height * 0.14f
+
+                drawRoundRect(
+                    color = frameColor,
+                    topLeft = Offset(left, top),
+                    size = Size(rectW, rectH),
+                    cornerRadius = CornerRadius(36f, 36f),
+                    style = Stroke(
+                        width = if (isReady) 8f else 5f,
+                        pathEffect = if (isReady) null
+                        else PathEffect.dashPathEffect(floatArrayOf(22f, 16f), 0f)
+                    )
+                )
+
+                // Stylized head & shoulders silhouette guide inside the frame
+                val cx = size.width / 2f
+                drawCircle(
+                    color = frameColor.copy(alpha = 0.4f),
+                    radius = rectW * 0.14f,
+                    center = Offset(cx, top + rectH * 0.16f),
+                    style = Stroke(width = 4f)
+                )
+                drawRoundRect(
+                    color = frameColor.copy(alpha = 0.35f),
+                    topLeft = Offset(cx - rectW * 0.22f, top + rectH * 0.28f),
+                    size = Size(rectW * 0.44f, rectH * 0.42f),
+                    cornerRadius = CornerRadius(40f, 40f),
+                    style = Stroke(width = 4f)
+                )
+            }
         } else {
+            // Reassuring in-app Privacy Assurance Card shown BEFORE Android's system camera dialog
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(ObsidianBackground),
+                    .background(ObsidianBackground)
+                    .padding(horizontal = 20.dp, vertical = 72.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.padding(24.dp)
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color(0xFF10221C),
+                    border = BorderStroke(1.dp, PoseMatchedGreen.copy(alpha = 0.55f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 460.dp)
+                        .testTag("calibration_privacy_card")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.VideocamOff,
-                        contentDescription = null,
-                        tint = SaffronGold,
-                        modifier = Modifier.size(56.dp)
-                    )
-                    Text(
-                        text = lText(
-                            "Kamera ruxsati berilmadi — Faqat Audio rejimiga o‘tilmoqda...",
-                            "Камера рухсати берилмади — Фақат Аудио режимига ўтилмоқда..."
-                        ).get(script),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White
-                    )
+                    Column(
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = PoseMatchedGreen.copy(alpha = 0.18f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Lock,
+                                contentDescription = null,
+                                tint = PoseMatchedGreen,
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .size(30.dp)
+                            )
+                        }
+                        Text(
+                            text = lText(
+                                "100% Maxfiy va Oflayn AI Kamera",
+                                "100% Махфий ва Офлайн AI Камера"
+                            ).get(script),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        Text(
+                            text = lText(
+                                "Video hech qayerga yuborilmaydi va telefonga ham saqlanmaydi. AI faqat namoz holatingizni joyida aniqlaydi. Xohlasangiz kamerasiz Faqat Audio rejimida o‘qishingiz mumkin.",
+                                "Видео ҳеч қаерга юборилмайди ва телефонга ҳам сақланмайди. AI фақат намоз ҳолатингизни жойида аниқлайди. Хоҳласангиз камерасиз Фақат Аудио режимида ўқишингиз мумкин."
+                            ).get(script),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.White.copy(alpha = 0.86f)
+                        )
+                        Button(
+                            onClick = {
+                                permissionRequested = true
+                                permissionLauncher.launch(Manifest.permission.CAMERA)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp)
+                                .testTag("calibration_grant_camera_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PoseMatchedGreen,
+                                contentColor = Color(0xFF00291D)
+                            )
+                        ) {
+                            Icon(Icons.Default.Videocam, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = lText("Kameraga ruxsat berish", "Камерага рухсат бериш").get(script),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                navigateToSession(CoachMode.AUDIO_ONLY, FallbackReason.USER_SELECTED)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("calibration_privacy_audio_only_button"),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.45f))
+                        ) {
+                            Icon(Icons.Default.GraphicEq, contentDescription = null, tint = Color.White)
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = lText("Kamerasiz (Faqat Audio)", "Камерасиз (Фақат Аудио)").get(script),
+                                color = Color.White
+                            )
+                        }
+                    }
                 }
             }
-        }
-
-        // Silhouette Guide Overlay
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val rectW = size.width * 0.66f
-            val rectH = size.height * 0.56f
-            val left = (size.width - rectW) / 2f
-            val top = size.height * 0.14f
-
-            drawRoundRect(
-                color = frameColor,
-                topLeft = Offset(left, top),
-                size = Size(rectW, rectH),
-                cornerRadius = CornerRadius(36f, 36f),
-                style = Stroke(
-                    width = if (isReady) 8f else 5f,
-                    pathEffect = if (isReady) null
-                    else PathEffect.dashPathEffect(floatArrayOf(22f, 16f), 0f)
-                )
-            )
-
-            // Stylized head & shoulders silhouette guide inside the frame
-            val cx = size.width / 2f
-            drawCircle(
-                color = frameColor.copy(alpha = 0.4f),
-                radius = rectW * 0.14f,
-                center = Offset(cx, top + rectH * 0.16f),
-                style = Stroke(width = 4f)
-            )
-            drawRoundRect(
-                color = frameColor.copy(alpha = 0.35f),
-                topLeft = Offset(cx - rectW * 0.22f, top + rectH * 0.28f),
-                size = Size(rectW * 0.44f, rectH * 0.42f),
-                cornerRadius = CornerRadius(40f, 40f),
-                style = Stroke(width = 4f)
-            )
         }
 
         // Top Bar + Compact Phone Placement Visual Guide
@@ -310,7 +381,31 @@ fun CalibrationScreen(
                     )
                 }
 
-                Spacer(Modifier.size(48.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = Color.Black.copy(alpha = 0.55f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (uiState.useFrontCamera) Color.White.copy(alpha = 0.25f)
+                        else SaffronGold.copy(alpha = 0.8f)
+                    )
+                ) {
+                    IconButton(
+                        onClick = onToggleCameraFacing,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("calibration_flip_camera_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Cameraswitch,
+                            contentDescription = lText(
+                                if (uiState.useFrontCamera) "Orqa kameraga o‘tish" else "Old kameraga o‘tish",
+                                if (uiState.useFrontCamera) "Орқа камерага ўтиш" else "Олд камерага ўтиш"
+                            ).get(script),
+                            tint = if (uiState.useFrontCamera) Color.White else SaffronGold
+                        )
+                    }
+                }
             }
 
             val qazoType = com.example.domain.model.QazoPrayerType.fromId(uiState.qazoTypeId)
@@ -336,6 +431,7 @@ fun CalibrationScreen(
                 }
             }
 
+            if (hasCameraPermission) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
                 color = Color.Black.copy(alpha = 0.72f),
@@ -455,9 +551,11 @@ fun CalibrationScreen(
                     )
                 }
             }
+            }
         }
 
-        // Bottom Guidance & Controls
+        // Bottom Guidance & Controls (only when camera permission is active)
+        if (hasCameraPermission) {
         Column(
             modifier = Modifier
                 .widthIn(max = 560.dp)
@@ -593,6 +691,29 @@ fun CalibrationScreen(
                     )
                 }
             }
+
+            if (hasCameraPermission && !isReady) {
+                TextButton(
+                    onClick = {
+                        navigateToSession(CoachMode.CAMERA_AI, FallbackReason.NONE)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("calibration_force_start_button")
+                ) {
+                    Text(
+                        text = lText(
+                            "Joy tor bo‘lsa — baribir boshlash →",
+                            "Жой тор бўлса — барибир бошлаш →"
+                        ).get(script),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = SaffronGold,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
         }
     }
 }

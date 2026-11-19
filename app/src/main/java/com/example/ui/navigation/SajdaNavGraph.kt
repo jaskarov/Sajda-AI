@@ -74,7 +74,8 @@ data class ActivePrayerRoute(
     val trackId: String,
     val modeName: String,
     val fallbackReasonName: String,
-    val qazoTypeId: String = ""
+    val qazoTypeId: String = "",
+    val useFrontCamera: Boolean = true
 )
 
 @Serializable
@@ -355,13 +356,15 @@ fun SajdaNavGraph(
                             trackId = route.trackId,
                             modeName = mode.name,
                             fallbackReasonName = reason.name,
-                            qazoTypeId = route.qazoTypeId
+                            qazoTypeId = route.qazoTypeId,
+                            useFrontCamera = coachState.useFrontCamera
                         )
                     ) {
                         popUpTo<CalibrationRoute> { inclusive = true }
                     }
                 },
                 onSeatedModeToggle = coachViewModel::setSeatedPrayerMode,
+                onToggleCameraFacing = coachViewModel::toggleCameraFacing,
                 onExit = { navController.popBackStack() }
             )
         }
@@ -382,7 +385,8 @@ fun SajdaNavGraph(
                     mode = mode,
                     fallbackReason = reason,
                     qazoTypeId = route.qazoTypeId,
-                    initialSettings = mainUiState.settings
+                    initialSettings = mainUiState.settings,
+                    useFrontCamera = route.useFrontCamera
                 )
             }
 
@@ -397,6 +401,7 @@ fun SajdaNavGraph(
                     coachViewModel.switchToAudioOnly(FallbackReason.USER_SELECTED)
                 },
                 onSwitchToCamera = coachViewModel::switchToCameraMode,
+                onToggleCameraFacing = coachViewModel::toggleCameraFacing,
                 onLifecyclePause = coachViewModel::pauseOnBackground,
                 onExit = {
                     coachViewModel.cancelContinuationCountdown()

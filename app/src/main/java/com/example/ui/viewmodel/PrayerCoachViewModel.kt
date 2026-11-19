@@ -56,7 +56,10 @@ data class PrayerCoachUiState(
     val hapticFeedbackPulse: Int = 0,
     val qazoTypeId: String = "",
     val qazoDecrementedOnCompletion: Boolean = false,
-    val salamProgressStage: Int = 0
+    val salamProgressStage: Int = 0,
+    val useFrontCamera: Boolean = true,
+    val stuckPoseRescueCountdownSec: Int = 0,
+    val consecutiveStuckRescues: Int = 0
 ) {
     val currentStep: PrayerStep? get() = steps.getOrNull(currentStepIndex)
 }
@@ -80,12 +83,22 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     private var nextTrackCountdownJob: Job? = null
     private var startSessionJob: Job? = null
     private var postCueDelayJob: Job? = null
+    private var stuckRescueJob: Job? = null
     private var sessionStartMillis: Long = 0L
     private var stepEnteredMillis: Long = 0L
     private var activeSessionStarted: Boolean = false
     private var lastAutoAdvanceStepIndex: Int = -1
     private var salamFirstSideDir: Int = 0
     private var salamFirstTurnMillis: Long = 0L
+
+    @VisibleForTesting
+    internal var stuckRescueGraceMs: Long = DEFAULT_STUCK_RESCUE_GRACE_MS
+
+    @VisibleForTesting
+    internal var stuckRescueCountdownSeconds: Int = DEFAULT_STUCK_RESCUE_COUNTDOWN_SEC
+
+    @VisibleForTesting
+    internal var stuckRescueTickMs: Long = 1000L
 
     init {
         audioCoach.setOnAudioFocusLost {
@@ -206,16 +219,26 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    fun setUseFrontCamera(useFront: Boolean) {
+        _uiState.update { it.copy(useFrontCamera = useFront) }
+    }
+
+    fun toggleCameraFacing() {
+        _uiState.update { it.copy(useFrontCamera = !it.useFrontCamera) }
+    }
+
     fun startActivePrayerSession(
         track: PrayerTrack,
         mode: CoachMode,
         fallbackReason: FallbackReason = FallbackReason.NONE,
         qazoTypeId: String = "",
-        initialSettings: UserSettings? = null
+        initialSettings: UserSettings? = null,
+        useFrontCamera: Boolean = _uiState.value.useFrontCamera
     ) {
         nextTrackCountdownJob?.cancel()
         startSessionJob?.cancel()
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         timerJob?.cancel()
 
         val effectiveSettings = initialSettings ?: _uiState.value.settings
@@ -254,7 +277,10 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 nextTrackCountdownTotalSec = 5,
                 qazoTypeId = qazoTypeId,
                 qazoDecrementedOnCompletion = false,
-                salamProgressStage = 0
+                salamProgressStage = 0,
+                useFrontCamera = useFrontCamera,
+                stuckPoseRescueCountdownSec = 0,
+                consecutiveStuckRescues = 0
             )
         }
 
@@ -373,9 +399,13 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
             val step = state.currentStep ?: return
             val elapsedInStep = nowMs - stepEnteredMillis
             val poseReady = isStepPoseReadyForAdvance(step, state)
+            if (poseReady && state.stuckPoseRescueCountdownSec > 0) {
+                cancelStuckPoseRescue()
+            }
             if (state.stepAudioDone && poseReady && elapsedInStep >= 1200L) {
                 if (lastAutoAdvanceStepIndex != state.currentStepIndex) {
                     lastAutoAdvanceStepIndex = state.currentStepIndex
+                    _uiState.update { it.copy(consecutiveStuckRescues = 0) }
                     advanceToNextStep()
                 }
             }
@@ -385,6 +415,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     fun switchToAudioOnly(reason: FallbackReason) {
         val current = _uiState.value
         if (current.mode == CoachMode.AUDIO_ONLY) return
+        cancelStuckPoseRescue()
         _uiState.update {
             it.copy(
                 mode = CoachMode.AUDIO_ONLY,
@@ -405,6 +436,10 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 audioOnlyRemainingSec = 0
             )
         }
+        val latest = _uiState.value
+        if (activeSessionStarted && !latest.isPaused && !latest.isCompleted && latest.stepAudioDone) {
+            startStuckPoseRescueWatcher(latest.currentStepIndex)
+        }
     }
 
     /**
@@ -415,6 +450,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         val state = _uiState.value
         if (!activeSessionStarted || state.isCompleted || state.isPaused) return
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         timerJob?.cancel()
         audioCoach.pause()
         _uiState.update {
@@ -450,6 +486,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
         }
         if (nextPaused) {
             postCueDelayJob?.cancel()
+            cancelStuckPoseRescue()
             audioCoach.pause()
             timerJob?.cancel()
         } else {
@@ -458,6 +495,9 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 finalizeStepAudio(latest.currentStepIndex)
             } else {
                 audioCoach.resume()
+                if (latest.mode == CoachMode.CAMERA_AI && latest.stepAudioDone && !latest.isCompleted) {
+                    startStuckPoseRescueWatcher(latest.currentStepIndex)
+                }
             }
             if (_uiState.value.mode == CoachMode.AUDIO_ONLY) {
                 startAudioOnlyStepTimer()
@@ -467,6 +507,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
 
     fun advanceToNextStep() {
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         val state = _uiState.value
         if (state.isCompleted) return
         _uiState.update { it.copy(hapticFeedbackPulse = it.hapticFeedbackPulse + 1) }
@@ -484,6 +525,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     private fun enterStep(index: Int) {
         timerJob?.cancel()
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         val state = _uiState.value
         val step = state.steps.getOrNull(index) ?: return
         stepEnteredMillis = SystemClock.elapsedRealtime()
@@ -496,6 +538,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                 isPostRecitationCueActive = false,
                 playbackProgress = 0f,
                 salamProgressStage = 0,
+                stuckPoseRescueCountdownSec = 0,
                 audioOnlyRemainingSec = (step.minHoldDurationMs / 1000L).toInt().coerceAtLeast(3)
             )
         }
@@ -583,8 +626,75 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
                     lastAutoAdvanceStepIndex != updated.currentStepIndex
                 ) {
                     lastAutoAdvanceStepIndex = updated.currentStepIndex
+                    _uiState.update { it.copy(consecutiveStuckRescues = 0) }
                     advanceToNextStep()
+                } else {
+                    startStuckPoseRescueWatcher(stepIndex)
                 }
+            }
+        }
+    }
+
+    private fun cancelStuckPoseRescue() {
+        stuckRescueJob?.cancel()
+        stuckRescueJob = null
+        if (_uiState.value.stuckPoseRescueCountdownSec != 0) {
+            _uiState.update { it.copy(stuckPoseRescueCountdownSec = 0) }
+        }
+    }
+
+    /**
+     * Prevents a worshipper from ever getting stuck in Sajda / Ruku in Camera AI mode when loose
+     * prayer attire or someone crossing the room hides pose landmarks: after a calm grace period,
+     * displays a brief countdown and gently auto-advances with a soft transition chime.
+     */
+    private fun startStuckPoseRescueWatcher(stepIndex: Int) {
+        stuckRescueJob?.cancel()
+        stuckRescueJob = viewModelScope.launch {
+            delay(stuckRescueGraceMs)
+            val afterGrace = _uiState.value
+            if (!isActive || afterGrace.isPaused || afterGrace.isCompleted ||
+                afterGrace.mode != CoachMode.CAMERA_AI ||
+                afterGrace.currentStepIndex != stepIndex ||
+                !afterGrace.stepAudioDone
+            ) {
+                return@launch
+            }
+            val currentStep = afterGrace.currentStep ?: return@launch
+            if (isStepPoseReadyForAdvance(currentStep, afterGrace)) {
+                return@launch
+            }
+
+            for (sec in stuckRescueCountdownSeconds downTo 1) {
+                val state = _uiState.value
+                if (!isActive || state.isPaused || state.isCompleted ||
+                    state.mode != CoachMode.CAMERA_AI ||
+                    state.currentStepIndex != stepIndex ||
+                    !state.stepAudioDone
+                ) {
+                    _uiState.update { it.copy(stuckPoseRescueCountdownSec = 0) }
+                    return@launch
+                }
+                _uiState.update { it.copy(stuckPoseRescueCountdownSec = sec) }
+                delay(stuckRescueTickMs)
+            }
+
+            val finalState = _uiState.value
+            if (isActive && !finalState.isPaused && !finalState.isCompleted &&
+                finalState.mode == CoachMode.CAMERA_AI &&
+                finalState.currentStepIndex == stepIndex &&
+                finalState.stepAudioDone
+            ) {
+                if (finalState.settings.acousticChimeEnabled) {
+                    audioCoach.playSoftTransitionChime()
+                }
+                _uiState.update {
+                    it.copy(
+                        stuckPoseRescueCountdownSec = 0,
+                        consecutiveStuckRescues = it.consecutiveStuckRescues + 1
+                    )
+                }
+                advanceToNextStep()
             }
         }
     }
@@ -676,6 +786,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     private fun completePrayerSession() {
         timerJob?.cancel()
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         nextTrackCountdownJob?.cancel()
         audioCoach.stop()
         val state = _uiState.value
@@ -757,6 +868,7 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     fun cleanup() {
         timerJob?.cancel()
         postCueDelayJob?.cancel()
+        cancelStuckPoseRescue()
         startSessionJob?.cancel()
         nextTrackCountdownJob?.cancel()
         audioCoach.release()
@@ -765,5 +877,10 @@ class PrayerCoachViewModel(application: Application) : AndroidViewModel(applicat
     override fun onCleared() {
         super.onCleared()
         cleanup()
+    }
+
+    companion object {
+        private const val DEFAULT_STUCK_RESCUE_GRACE_MS = 7000L
+        private const val DEFAULT_STUCK_RESCUE_COUNTDOWN_SEC = 5
     }
 }

@@ -392,25 +392,6 @@ fun PrayerGuideOnboardingScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Surface(
-                        onClick = {
-                            script = if (script == TextScript.LATIN) TextScript.CYRILLIC else TextScript.LATIN
-                            onPreferencesUpdated(gender, script, seatedMode)
-                        },
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier
-                            .heightIn(min = 36.dp)
-                            .testTag("guide_script_toggle")
-                    ) {
-                        Text(
-                            text = if (script == TextScript.LATIN) "Кирилл" else "Lotin",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                        )
-                    }
-
                     if (isFirstLaunch) {
                         TextButton(
                             onClick = { onFinish(gender, script, seatedMode) },
@@ -421,6 +402,97 @@ fun PrayerGuideOnboardingScreen(
                             Text(
                                 text = lText("O‘tkazish", "Ўтказиш").get(script),
                                 style = MaterialTheme.typography.labelLarge
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Prominent Latin / Cyrillic Alphabet Selector right at the top of screen 1
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("guide_script_selector_bar")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val isLatin = script == TextScript.LATIN
+                    Surface(
+                        onClick = {
+                            if (script != TextScript.LATIN) {
+                                script = TextScript.LATIN
+                                onPreferencesUpdated(gender, script, seatedMode)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isLatin) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag(if (!isLatin) "guide_script_toggle" else "guide_script_latin_button")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp)
+                                .then(
+                                    if (!isLatin) Modifier.testTag("guide_script_latin_button")
+                                    else Modifier
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "O‘zbekcha (Lotin)",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (isLatin) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isLatin) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Surface(
+                        onClick = {
+                            if (script != TextScript.CYRILLIC) {
+                                script = TextScript.CYRILLIC
+                                onPreferencesUpdated(gender, script, seatedMode)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (!isLatin) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .testTag(if (isLatin) "guide_script_toggle" else "guide_script_cyrillic_button")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp)
+                                .then(
+                                    if (isLatin) Modifier.testTag("guide_script_cyrillic_button")
+                                    else Modifier
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Ўзбекча (Кирилл)",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = if (!isLatin) FontWeight.Bold else FontWeight.Medium,
+                                color = if (!isLatin) MaterialTheme.colorScheme.onPrimary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
