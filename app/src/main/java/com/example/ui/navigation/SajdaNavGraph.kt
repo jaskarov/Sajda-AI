@@ -1,6 +1,8 @@
 package com.example.ui.navigation
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
@@ -16,9 +18,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,10 +29,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.Density
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.theme.SajdaAiTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -95,21 +96,17 @@ fun SajdaNavGraph(
         PrayerGuideOnboardingRoute(isFirstLaunch = true)
     }
 
-    val baseDensity = LocalDensity.current
-    val effectiveDensity = if (mainUiState.settings.largeTextMode) {
-        Density(
-            density = baseDensity.density,
-            fontScale = (baseDensity.fontScale * 1.18f).coerceAtMost(1.6f)
-        )
-    } else {
-        baseDensity
-    }
-
-    CompositionLocalProvider(LocalDensity provides effectiveDensity) {
-    NavHost(
-        navController = navController,
-        startDestination = startDest
+    val systemDark = isSystemInDarkTheme()
+    SajdaAiTheme(
+        darkTheme = systemDark || mainUiState.settings.oledNightMode,
+        oledNightMode = mainUiState.settings.oledNightMode,
+        largeTextMode = mainUiState.settings.largeTextMode
     ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            NavHost(
+                navController = navController,
+                startDestination = startDest
+            ) {
         composable<PrayerGuideOnboardingRoute> { backStackEntry ->
             val route = backStackEntry.toRoute<PrayerGuideOnboardingRoute>()
             PrayerGuideOnboardingScreen(
@@ -279,6 +276,7 @@ fun SajdaNavGraph(
                         onOpenPrayerGuide = {
                             navController.navigate(PrayerGuideOnboardingRoute(isFirstLaunch = false))
                         },
+                        onToggleOledNightMode = mainViewModel::setOledNightMode,
                         modifier = Modifier.padding(innerPadding)
                     )
                     1 -> LearnScreen(
@@ -424,6 +422,12 @@ fun SajdaNavGraph(
                 onLowPowerCameraToggle = mainViewModel::setLowPowerCameraMode,
                 onAutoBoostVolumeToggle = mainViewModel::setAutoBoostPrayerVolume,
                 onAcousticChimeToggle = mainViewModel::setAcousticChimeEnabled,
+                onOledNightModeToggle = mainViewModel::setOledNightMode,
+                onReminderSoundModeChange = mainViewModel::setReminderSoundMode,
+                onPreviewTakbirSound = {
+                    val sample = lText("Allohu Akbar", "Аллоҳу Акбар").get(mainUiState.settings.script)
+                    mainViewModel.speakSample(sample, "takbir")
+                },
                 onSyncCalendarNow = mainViewModel::syncPrayerCalendarNow,
                 onExportBackupUri = mainViewModel::exportBackupToUri,
                 onImportBackupUri = mainViewModel::importBackupFromUri,
@@ -445,5 +449,6 @@ fun SajdaNavGraph(
             )
         }
     }
+        }
     }
 }

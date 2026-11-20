@@ -10,8 +10,18 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class BootCompletedReceiver : BroadcastReceiver() {
+
+    companion object {
+        val SUPPORTED_ACTIONS: Set<String> = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_MY_PACKAGE_REPLACED
+        )
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        if (intent.action !in SUPPORTED_ACTIONS) return
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {

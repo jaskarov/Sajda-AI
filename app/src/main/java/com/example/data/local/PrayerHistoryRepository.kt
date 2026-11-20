@@ -114,5 +114,14 @@ class PrayerHistoryRepository(
         }
     }
 
+    suspend fun getAllSessionHistory(): List<PrayerHistoryEntity> =
+        historyDao.getAllHistoryForBackup()
+
+    suspend fun restoreSessionHistory(items: List<PrayerHistoryEntity>) {
+        if (items.isNotEmpty()) {
+            historyDao.insertAllHistory(items)
+        }
+    }
+
     fun todayKey(): String = formatDayKey()
 }

@@ -102,7 +102,8 @@ class PrayerWorkScheduler(
             prayerName = prayerType.title.get(script),
             prayerTime = slot.timeFormatted,
             cityName = city.name.get(script),
-            script = script
+            script = script,
+            soundMode = settings.reminderSoundMode
         )
     }
 

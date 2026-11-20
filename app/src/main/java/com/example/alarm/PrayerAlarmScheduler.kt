@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import com.example.data.preferences.ReminderSoundMode
 import com.example.domain.model.PrayerType
 import com.example.domain.model.TextScript
 
@@ -37,7 +38,8 @@ class PrayerAlarmScheduler(private val context: Context) {
         prayerName: String,
         prayerTime: String,
         cityName: String,
-        script: TextScript
+        script: TextScript,
+        soundMode: ReminderSoundMode = ReminderSoundMode.TAKBIR
     ) {
         if (!type.isPrayable) return
         val pendingIntent = buildPendingIntent(
@@ -46,6 +48,7 @@ class PrayerAlarmScheduler(private val context: Context) {
             prayerTime = prayerTime,
             cityName = cityName,
             script = script,
+            soundMode = soundMode,
             flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         ) ?: return
 
@@ -105,6 +108,7 @@ class PrayerAlarmScheduler(private val context: Context) {
         prayerTime: String,
         cityName: String,
         script: TextScript,
+        soundMode: ReminderSoundMode,
         flags: Int
     ): PendingIntent? {
         val requestCode = REQUEST_CODE_BASE + type.ordinal
@@ -114,6 +118,7 @@ class PrayerAlarmScheduler(private val context: Context) {
             putExtra(PrayerAlarmReceiver.EXTRA_PRAYER_TIME, prayerTime)
             putExtra(PrayerAlarmReceiver.EXTRA_CITY_NAME, cityName)
             putExtra(PrayerAlarmReceiver.EXTRA_SCRIPT_ID, script.id)
+            putExtra(PrayerAlarmReceiver.EXTRA_SOUND_MODE_ID, soundMode.id)
             putExtra(PrayerAlarmReceiver.EXTRA_REQUEST_CODE, requestCode)
         }
         return PendingIntent.getBroadcast(context, requestCode, intent, flags)

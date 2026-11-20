@@ -103,13 +103,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         syncMetadataDao = database.prayerSyncMetadataDao()
     )
     private val qazoRepo = QazoPrayerRepository(database.qazoPrayerDao())
-    private val backupManager = SajdaBackupManager(prefsRepo, historyRepo, qazoRepo)
+    private val backupManager = SajdaBackupManager(prefsRepo, historyRepo, qazoRepo, database)
     private val getPrayerTimesUseCase = GetPrayerTimesUseCase()
     private val workScheduler = PrayerWorkScheduler(application)
     private val compassSensor = QiblaCompassSensor(application)
-    private val audioCoach = PrayerAudioCoach(application)
+    private var _audioCoach: PrayerAudioCoach? = null
+    private val ttsReadinessFlow = MutableStateFlow(com.example.audio.TtsReadinessInfo())
 
-    private val tickerFlow = MutableStateFlow(System.currentTimeMillis())
+    private fun getOrCreateAudioCoach(): PrayerAudioCoach {
+        return _audioCoach ?: PrayerAudioCoach(getApplication()).also { coach ->
+            _audioCoach = coach
+            viewModelScope.launch {
+                coach.ttsReadiness.collect { readiness ->
+                    ttsReadinessFlow.value = readiness
+                }
+            }
+        }
+    }
+
+    // Minute-aligned clock tick (prevents waking up MainUiState and recomposing all screens every 1s)
+    private val scheduleTickFlow = MutableStateFlow(System.currentTimeMillis())
     private val weekOffsetFlow = MutableStateFlow(0)
     private val calendarSyncingFlow = MutableStateFlow(false)
     private val calendarSyncStatusFlow = MutableStateFlow<com.example.domain.model.LText?>(null)
@@ -127,7 +140,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val currentDayKeyFlow = tickerFlow
+    private val currentDayKeyFlow = scheduleTickFlow
         .map { PrayerHistoryRepository.formatDayKey(java.util.Date(it)) }
         .distinctUntilChanged()
 
@@ -209,7 +222,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val auxFlow = combine(
         backupStatusMessageFlow,
-        audioCoach.ttsReadiness,
+        ttsReadinessFlow,
         tahoratAutoPlayFlow
     ) { backupMsg, ttsReadiness, tahoratPair ->
         Triple(backupMsg, ttsReadiness, tahoratPair)
@@ -218,7 +231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val uiState: StateFlow<MainUiState> = combine(
         prefsRepo.settingsFlow,
         databaseFlows,
-        tickerFlow,
+        scheduleTickFlow,
         auxFlow
     ) { settings, dbBundle, nowMillis, aux ->
         val (backupMsg, ttsReadiness, tahoratPair) = aux
@@ -244,7 +257,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             compassAzimuth = 0f,
             compassAccuracy = SensorManager.SENSOR_STATUS_ACCURACY_HIGH,
             hasCompassSensor = true,
-            audioStatus = audioCoach.status.value,
+            audioStatus = _audioCoach?.status?.value ?: AudioCoachStatus.Idle,
             ttsReadiness = ttsReadiness,
             calendarSource = dbBundle.calendarBundle.todayDay?.source
                 ?: dbBundle.calendarBundle.metadata?.provider
@@ -296,22 +309,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            calendarRepo.ensureSeededFromAssets()
-            calendarRepo.ensureYearSeededOffline(2027)
+            val initialSettings = prefsRepo.settingsFlow.first()
             val nowYear = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Tashkent"))
                 .get(java.util.Calendar.YEAR)
-            if (nowYear >= 2027) {
-                calendarRepo.ensureYearSeededOffline(nowYear)
-                calendarRepo.ensureYearSeededOffline(nowYear + 1)
-            }
-            val initialSettings = prefsRepo.settingsFlow.first()
-            calendarRepo.syncFromNetworkIfConnected(initialSettings.selectedCityId)
+
+            // 1. Active-city-first fast seed (365 rows, ~15ms) so HomeScreen renders immediately
+            calendarRepo.ensureCitySeededFast(initialSettings.selectedCityId, nowYear)
             rescheduleAlarms()
+
+            // 2. Background network sync & deferred full-country seeding (never blocks cold start)
+            launch(kotlinx.coroutines.Dispatchers.IO) {
+                calendarRepo.syncFromNetworkIfConnected(initialSettings.selectedCityId)
+                delay(1500L)
+                calendarRepo.ensureSeededFromAssets()
+                calendarRepo.ensureYearSeededOffline(2027)
+                if (nowYear >= 2027) {
+                    calendarRepo.ensureYearSeededOffline(nowYear)
+                    calendarRepo.ensureYearSeededOffline(nowYear + 1)
+                }
+            }
         }
+        // Minute-aligned schedule refresh (handles prayer transitions & midnight rollover without 1Hz UI churn)
         viewModelScope.launch {
             while (true) {
-                tickerFlow.value = System.currentTimeMillis()
-                delay(1000L)
+                val now = System.currentTimeMillis()
+                scheduleTickFlow.value = now
+                val msUntilNextMinute = (60_000L - (now % 60_000L)).coerceIn(1_000L, 60_000L)
+                delay(msUntilNextMinute)
             }
         }
     }
@@ -386,18 +410,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 val raw = resolver.openInputStream(uri)?.use { stream ->
-                    val reader = stream.bufferedReader(Charsets.UTF_8)
-                    val buffer = CharArray(SajdaBackupManager.MAX_BACKUP_BYTES.toInt() + 1024)
-                    val count = reader.read(buffer)
-                    if (count > SajdaBackupManager.MAX_BACKUP_BYTES) {
-                        return@launch backupStatusMessageFlow.let {
-                            it.value = com.example.domain.model.lText(
-                                "Tiklash xatosi: Zaxira fayli hajmi 2 MB dan oshmasligi kerak",
-                                "Тиклаш хатоси: Захира файли ҳажми 2 МБ дан ошмаслиги керак"
-                            )
-                        }
-                    }
-                    if (count > 0) String(buffer, 0, count) else ""
+                    SajdaBackupManager.readBoundedUtf8(stream)
                 } ?: ""
                 backupManager.importFromJson(raw)
             }.getOrElse { err ->
@@ -500,6 +513,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { prefsRepo.setAcousticChimeEnabled(enabled) }
     }
 
+    fun setOledNightMode(enabled: Boolean) {
+        viewModelScope.launch { prefsRepo.setOledNightMode(enabled) }
+    }
+
+    fun setReminderSoundMode(mode: com.example.data.preferences.ReminderSoundMode) {
+        viewModelScope.launch {
+            prefsRepo.setReminderSoundMode(mode)
+            rescheduleAlarms()
+        }
+    }
+
     fun incrementQazo(type: QazoPrayerType) {
         viewModelScope.launch { qazoRepo.increment(type) }
     }
@@ -550,7 +574,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun speakSample(text: String, audioAssetId: String = "") {
         stopTahoratAutoPlay()
         val settings = uiState.value.settings
-        audioCoach.speak(
+        getOrCreateAudioCoach().speak(
             text = text,
             gender = settings.gender,
             preferOfflineMp3 = settings.preferOfflineMp3,
@@ -564,11 +588,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         tahoratAutoPlayJob?.cancel()
         tahoratAutoPlayJob = viewModelScope.launch {
             val settings = uiState.value.settings
+            val coach = getOrCreateAudioCoach()
             try {
                 for (step in steps) {
                     tahoratAutoPlayFlow.value = true to step.id
                     kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
-                        audioCoach.speak(
+                        coach.speak(
                             text = step.ttsPrompt,
                             gender = settings.gender,
                             preferOfflineMp3 = settings.preferOfflineMp3,
@@ -591,7 +616,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         tahoratAutoPlayJob?.cancel()
         tahoratAutoPlayJob = null
         tahoratAutoPlayFlow.value = false to null
-        audioCoach.stop()
+        _audioCoach?.stop()
     }
 
     fun stopSampleAudio() {
@@ -661,7 +686,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
-        audioCoach.release()
+        _audioCoach?.release()
+        _audioCoach = null
     }
 
     private data class SyncMetaBundle(

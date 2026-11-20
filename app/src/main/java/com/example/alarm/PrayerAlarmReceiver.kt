@@ -22,6 +22,7 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         const val EXTRA_PRAYER_TIME = "extra_prayer_time"
         const val EXTRA_CITY_NAME = "extra_city_name"
         const val EXTRA_SCRIPT_ID = "extra_script_id"
+        const val EXTRA_SOUND_MODE_ID = "extra_sound_mode_id"
         const val EXTRA_REQUEST_CODE = "extra_request_code"
     }
 
@@ -32,6 +33,9 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
         val prayerTime = intent.getStringExtra(EXTRA_PRAYER_TIME) ?: ""
         val cityName = intent.getStringExtra(EXTRA_CITY_NAME) ?: "O‘zbekiston"
         val script = TextScript.fromId(intent.getStringExtra(EXTRA_SCRIPT_ID))
+        val soundMode = com.example.data.preferences.ReminderSoundMode.fromId(
+            intent.getStringExtra(EXTRA_SOUND_MODE_ID)
+        )
         val notificationId = intent.getIntExtra(EXTRA_REQUEST_CODE, 101)
 
         PrayerNotificationHelper.showPrayerNotification(
@@ -40,7 +44,8 @@ class PrayerAlarmReceiver : BroadcastReceiver() {
             prayerName = prayerName,
             prayerTime = prayerTime,
             cityName = cityName,
-            script = script
+            script = script,
+            soundMode = soundMode
         )
 
         if (prayerType.isPrayable) {

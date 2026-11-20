@@ -38,9 +38,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
+import android.content.Intent
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -76,6 +78,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -311,6 +314,106 @@ fun WeeklyProgressScreen(
                                     ).get(script)
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // Family & Telegram Viral Share Card (Organic Growth Loop)
+            item {
+                val context = LocalContext.current
+                val shareTitle = lText(
+                    "Oilangiz va do‘stlaringiz bilan ulashing",
+                    "Оилангиз ва дўстларингиз билан улашинг"
+                ).get(script)
+                val shareSubtitle = lText(
+                    "Haftalik natijangiz: ${summary.overallRoundedPercent}% (${summary.totalCompleted}/${summary.totalPossible} namoz). Ota-onangiz yoki yaqinlaringizga oflayn Namoz Ustoz AI ilovasini tavsiya qiling.",
+                    "Ҳафталик натижангиз: ${summary.overallRoundedPercent}% (${summary.totalCompleted}/${summary.totalPossible} намоз). Ота-онангиз ёки яқинларингизга офлайн Намоз Устоз AI иловасини тавсия қилинг."
+                ).get(script)
+                val shareBody = lText(
+                    "Assalomu alaykum! Bu hafta ${summary.totalCompleted}/${summary.totalPossible} (${summary.overallRoundedPercent}%) namozni o‘qidim. O‘zbekiston taqvimi, Qori qiroatlari va oflayn AI-ustozli «Namoz Ustoz AI» ilovasini sizga ham tavsiya qilaman!",
+                    "Ассалому алайкум! Бу ҳафта ${summary.totalCompleted}/${summary.totalPossible} (${summary.overallRoundedPercent}%) намозни ўқидим. Ўзбекистон тақвими, Қори қироатлари ва офлайн AI-устозли «Намоз Устоз AI» иловасини сизга ҳам тавсия қиламан!"
+                ).get(script)
+
+                Card(
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("weekly_share_card")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                tint = SaffronGold,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = shareTitle,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = shareSubtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, shareBody)
+                                }
+                                runCatching {
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            sendIntent,
+                                            lText(
+                                                "Telegram yoki yaqinlarga yuborish",
+                                                "Telegram ёки яқинларга юбориш"
+                                            ).get(script)
+                                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
+                                .testTag("weekly_share_button"),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = lText(
+                                    "Ota-onam / Do‘stimga tavsiya qilish",
+                                    "Ота-онам / Дўстимга тавсия қилиш"
+                                ).get(script),
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
                 }

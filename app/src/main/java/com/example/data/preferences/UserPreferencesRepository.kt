@@ -9,12 +9,37 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.domain.model.Gender
+import com.example.domain.model.LText
 import com.example.domain.model.PrayerType
 import com.example.domain.model.TextScript
+import com.example.domain.model.lText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "sajda_prefs")
+
+enum class ReminderSoundMode(
+    val id: String,
+    val label: LText
+) {
+    TAKBIR(
+        id = "takbir",
+        label = lText("Qori Takbiri (Allohu Akbar)", "Қори Такбири (Аллоҳу Акбар)")
+    ),
+    DEFAULT_TONE(
+        id = "default_tone",
+        label = lText("Tizim ovozi", "Тизим овози")
+    ),
+    VIBRATE_ONLY(
+        id = "vibrate_only",
+        label = lText("Faqat tebranish (Ovozsiz)", "Фақат тебраниш (Овозсиз)")
+    );
+
+    companion object {
+        fun fromId(id: String?): ReminderSoundMode =
+            entries.firstOrNull { it.id == id } ?: TAKBIR
+    }
+}
 
 data class UserSettings(
     val onboardingCompleted: Boolean = false,
@@ -29,6 +54,8 @@ data class UserSettings(
     val lowPowerCameraMode: Boolean = false,
     val autoBoostPrayerVolume: Boolean = true,
     val acousticChimeEnabled: Boolean = true,
+    val oledNightMode: Boolean = false,
+    val reminderSoundMode: ReminderSoundMode = ReminderSoundMode.TAKBIR,
     val alarmMap: Map<PrayerType, Boolean> = PrayerType.entries.associateWith { it.isPrayable }
 )
 
@@ -47,6 +74,8 @@ class UserPreferencesRepository(private val context: Context) {
         val LOW_POWER_CAMERA_MODE = booleanPreferencesKey("low_power_camera_mode")
         val AUTO_BOOST_PRAYER_VOLUME = booleanPreferencesKey("auto_boost_prayer_volume")
         val ACOUSTIC_CHIME_ENABLED = booleanPreferencesKey("acoustic_chime_enabled")
+        val OLED_NIGHT_MODE = booleanPreferencesKey("oled_night_mode")
+        val REMINDER_SOUND_MODE = stringPreferencesKey("reminder_sound_mode")
         fun alarmKey(type: PrayerType) = booleanPreferencesKey("alarm_${type.id}")
     }
 
@@ -67,6 +96,8 @@ class UserPreferencesRepository(private val context: Context) {
             lowPowerCameraMode = prefs[Keys.LOW_POWER_CAMERA_MODE] ?: false,
             autoBoostPrayerVolume = prefs[Keys.AUTO_BOOST_PRAYER_VOLUME] ?: true,
             acousticChimeEnabled = prefs[Keys.ACOUSTIC_CHIME_ENABLED] ?: true,
+            oledNightMode = prefs[Keys.OLED_NIGHT_MODE] ?: false,
+            reminderSoundMode = ReminderSoundMode.fromId(prefs[Keys.REMINDER_SOUND_MODE]),
             alarmMap = alarms
         )
     }
@@ -136,6 +167,14 @@ class UserPreferencesRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.ACOUSTIC_CHIME_ENABLED] = enabled }
     }
 
+    suspend fun setOledNightMode(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.OLED_NIGHT_MODE] = enabled }
+    }
+
+    suspend fun setReminderSoundMode(mode: ReminderSoundMode) {
+        context.dataStore.edit { it[Keys.REMINDER_SOUND_MODE] = mode.id }
+    }
+
     suspend fun restoreSettings(settings: UserSettings) {
         context.dataStore.edit { prefs ->
             prefs[Keys.ONBOARDING_COMPLETED] = true
@@ -150,6 +189,8 @@ class UserPreferencesRepository(private val context: Context) {
             prefs[Keys.LOW_POWER_CAMERA_MODE] = settings.lowPowerCameraMode
             prefs[Keys.AUTO_BOOST_PRAYER_VOLUME] = settings.autoBoostPrayerVolume
             prefs[Keys.ACOUSTIC_CHIME_ENABLED] = settings.acousticChimeEnabled
+            prefs[Keys.OLED_NIGHT_MODE] = settings.oledNightMode
+            prefs[Keys.REMINDER_SOUND_MODE] = settings.reminderSoundMode.id
             PrayerType.entries.forEach { type ->
                 prefs[Keys.alarmKey(type)] = settings.alarmMap[type] ?: type.isPrayable
             }

@@ -229,10 +229,12 @@ fun ActivePrayerScreen(
         )
     }
 
+    val screenBackground = if (uiState.settings.oledNightMode) Color.Black else ObsidianBackground
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(ObsidianBackground)
+            .background(screenBackground)
             .windowInsetsPadding(WindowInsets.safeDrawing)
     ) {
         val isShortScreen = maxHeight < 580.dp

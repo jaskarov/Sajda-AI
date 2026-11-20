@@ -73,6 +73,78 @@ class PrayerCalendarRepository(
     private val seedMutex = Mutex()
     private val solarUseCase = GetPrayerTimesUseCase()
 
+    /**
+     * Fast cold-start seeding: populates ONLY the active city for [year] (365 rows, ~10-15ms)
+     * so HomeScreen renders immediately without waiting for all 14 cities (10,220+ rows).
+     */
+    suspend fun ensureCitySeededFast(
+        cityId: String,
+        year: Int = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).get(Calendar.YEAR)
+    ) = withContext(Dispatchers.IO) {
+        val city = UzbekistanCities.findById(cityId)
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Tashkent")).apply {
+            set(year, Calendar.JANUARY, 1, 12, 0, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val daysInYear = cal.getActualMaximum(Calendar.DAY_OF_YEAR)
+        if (dao.countForCityYear(city.id, year) >= daysInYear) return@withContext
+
+        seedMutex.withLock {
+            if (dao.countForCityYear(city.id, year) >= daysInYear) return@withLock
+            if (year == 2026) {
+                val seededFromAsset = runCatching {
+                    val rawJson = context.assets.open(ASSET_FILE_NAME)
+                        .bufferedReader(Charsets.UTF_8)
+                        .use { it.readText() }
+                    val payload = json.decodeFromString<BundledCalendarPayload>(rawJson)
+                    val cityDays = payload.cities[city.id].orEmpty()
+                    if (cityDays.isNotEmpty()) {
+                        val entities = cityDays.map { entry ->
+                            PrayerCalendarDayEntity(
+                                cityId = city.id,
+                                year = payload.year,
+                                month = entry.m,
+                                day = entry.d,
+                                bomdod = entry.b,
+                                quyosh = entry.q,
+                                peshin = entry.p,
+                                asr = entry.a,
+                                shom = entry.s,
+                                xufton = entry.x,
+                                source = payload.source,
+                                syncedAtMillis = 0L
+                            )
+                        }
+                        dao.insertAll(entities)
+                        true
+                    } else {
+                        false
+                    }
+                }.getOrDefault(false)
+                if (seededFromAsset) return@withLock
+            }
+
+            val generated = ArrayList<PrayerCalendarDayEntity>(daysInYear)
+            for (dayOfYear in 1..daysInYear) {
+                cal.set(Calendar.YEAR, year)
+                cal.set(Calendar.DAY_OF_YEAR, dayOfYear)
+                val month = cal.get(Calendar.MONTH) + 1
+                val day = cal.get(Calendar.DAY_OF_MONTH)
+                generated += solarUseCase.computeCalendarDay(
+                    city = city,
+                    year = year,
+                    month = month,
+                    day = day,
+                    source = "uz_taqvim_365_${year}_offline",
+                    syncedAtMillis = 0L
+                )
+            }
+            if (generated.isNotEmpty()) {
+                dao.insertAll(generated)
+            }
+        }
+    }
+
     suspend fun ensureSeededFromAssets() = withContext(Dispatchers.IO) {
         seedMutex.withLock {
             if (dao.countForYear(2026) < EXPECTED_MIN_ROWS) {

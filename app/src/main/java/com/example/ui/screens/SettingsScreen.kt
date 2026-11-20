@@ -37,8 +37,10 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Security
@@ -103,6 +105,9 @@ fun SettingsScreen(
     onLowPowerCameraToggle: (Boolean) -> Unit = {},
     onAutoBoostVolumeToggle: (Boolean) -> Unit = {},
     onAcousticChimeToggle: (Boolean) -> Unit = {},
+    onOledNightModeToggle: (Boolean) -> Unit = {},
+    onReminderSoundModeChange: (com.example.data.preferences.ReminderSoundMode) -> Unit = {},
+    onPreviewTakbirSound: () -> Unit = {},
     onSyncCalendarNow: () -> Unit = {},
     onExportBackupUri: (Uri) -> Unit = {},
     onImportBackupUri: (Uri) -> Unit = {},
@@ -364,6 +369,119 @@ fun SettingsScreen(
                                 checked = settings.lowPowerCameraMode,
                                 onCheckedChange = onLowPowerCameraToggle,
                                 modifier = Modifier.testTag("settings_low_power_camera_switch")
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DarkMode,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary
+                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = lText(
+                                            "Bomdod OLED tungi rejim",
+                                            "Бомдод OLED тунги режим"
+                                        ).get(script),
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = lText(
+                                            "Soat 05:00 da qorong‘i xonada ko‘zni qamashtirmaydigan qop-qora ekran.",
+                                            "Соат 05:00 да қоронғи хонада кўзни қамаштирмайдиган қоп-қора экран."
+                                        ).get(script),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Switch(
+                                checked = settings.oledNightMode,
+                                onCheckedChange = onOledNightModeToggle,
+                                modifier = Modifier.testTag("settings_oled_night_mode_switch")
+                            )
+                        }
+                    }
+                }
+
+                // Prayer Reminder Sound Selector (Qori Takbir / Default / Vibrate-only)
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.NotificationsActive,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = lText(
+                                        "Namoz eslatmasi ovozi (Bomdod / 5 vaqt)",
+                                        "Намоз эслатмаси овози (Бомдод / 5 вақт)"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = lText(
+                                        "Bomdodga uyg‘onish uchun Qori Takbiri yoki oilani uyg‘otmaslik uchun faqat tebranishni tanlang.",
+                                        "Бомдодга уйғониш учун Қори Такбири ёки оилани уйғотмаслик учун фақат тебранишни танланг."
+                                    ).get(script),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            com.example.data.preferences.ReminderSoundMode.entries.forEach { mode ->
+                                FilterChip(
+                                    selected = settings.reminderSoundMode == mode,
+                                    onClick = { onReminderSoundModeChange(mode) },
+                                    label = { Text(mode.label.get(script)) },
+                                    modifier = Modifier.testTag("settings_sound_${mode.id}")
+                                )
+                            }
+                        }
+
+                        OutlinedButton(
+                            onClick = onPreviewTakbirSound,
+                            modifier = Modifier.testTag("settings_preview_takbir_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.VolumeUp,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = lText(
+                                    "Qori Takbirini tinglash",
+                                    "Қори Такбирини тинглаш"
+                                ).get(script)
                             )
                         }
                     }

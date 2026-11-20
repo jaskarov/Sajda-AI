@@ -46,7 +46,8 @@ class PrayerNotificationWorker(
             prayerName = prayerName,
             prayerTime = prayerTime,
             cityName = cityName,
-            script = script
+            script = script,
+            soundMode = settings.reminderSoundMode
         )
 
         // Schedule tomorrow's occurrence using O'zbekiston astronomical prayer times

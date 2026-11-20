@@ -30,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -53,10 +55,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -97,6 +102,7 @@ fun HomeScreen(
     onOpenWeeklyStats: () -> Unit = {},
     onOpenWuduGuide: () -> Unit = {},
     onOpenPrayerGuide: () -> Unit = {},
+    onToggleOledNightMode: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -167,32 +173,53 @@ fun HomeScreen(
                         }
                     }
 
-                    IconButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Settings,
-                            contentDescription = lText("Sozlamalar", "Созламалар").get(script),
-                            tint = MaterialTheme.colorScheme.onBackground
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { onToggleOledNightMode(!uiState.settings.oledNightMode) },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("home_oled_toggle_button")
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.settings.oledNightMode) Icons.Default.LightMode
+                                else Icons.Default.DarkMode,
+                                contentDescription = lText(
+                                    "Bomdod OLED tungi rejim",
+                                    "Бомдод OLED тунги режим"
+                                ).get(script),
+                                tint = if (uiState.settings.oledNightMode) SaffronGold
+                                else MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onOpenSettings,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("settings_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = lText("Sozlamalar", "Созламалар").get(script),
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                     }
                 }
             }
 
             // Hero Countdown & CTA Card
             item {
+                val heroGradient = if (uiState.settings.oledNightMode) {
+                    listOf(Color(0xFF061A13), Color(0xFF020806))
+                } else {
+                    listOf(DeepHeroGradientStart, DeepHeroGradientEnd)
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(28.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(DeepHeroGradientStart, DeepHeroGradientEnd)
-                            )
-                        )
+                        .background(Brush.linearGradient(heroGradient))
                 ) {
                     // Subtle decorative mihrab arches in background
                     Canvas(modifier = Modifier.matchParentSize()) {
@@ -230,12 +257,10 @@ fun HomeScreen(
                             letterSpacing = 0.8.sp
                         )
 
-                        Text(
-                            text = formatCountdown(schedule.countdownSeconds),
-                            fontFamily = JetBrainsMonoFontFamily,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 32.sp,
-                            color = Color.White
+                        // Self-contained 1-second countdown (recomposes ONLY this text, never MainUiState)
+                        HomeCountdownText(
+                            initialSeconds = schedule.countdownSeconds,
+                            prayerKey = "${schedule.nextPrayer.id}_${schedule.nextPrayerTimeFormatted}"
                         )
 
                         Text(
@@ -679,6 +704,33 @@ private fun PrayerTimeSlotRow(
             }
         }
     }
+}
+
+@Composable
+private fun HomeCountdownText(
+    initialSeconds: Long,
+    prayerKey: String
+) {
+    var remainingSec by remember(prayerKey, initialSeconds) {
+        mutableLongStateOf(initialSeconds.coerceAtLeast(0L))
+    }
+
+    LaunchedEffect(prayerKey, initialSeconds) {
+        remainingSec = initialSeconds.coerceAtLeast(0L)
+        while (remainingSec > 0L) {
+            delay(1000L)
+            remainingSec = (remainingSec - 1L).coerceAtLeast(0L)
+        }
+    }
+
+    Text(
+        text = formatCountdown(remainingSec),
+        fontFamily = JetBrainsMonoFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 32.sp,
+        color = Color.White,
+        modifier = Modifier.testTag("home_countdown_text")
+    )
 }
 
 private fun formatCountdown(totalSeconds: Long): String {
