@@ -95,6 +95,7 @@ import com.example.domain.model.PrayerTrack
 import com.example.domain.model.lText
 import com.example.ui.components.CameraPosePreview
 import com.example.ui.components.RakatProgressIndicator
+import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.NightEmeraldPrimary
 import com.example.ui.theme.NightGold
@@ -908,8 +909,9 @@ fun ActivePrayerScreen(
 
                             Text(
                                 text = step.arabicText,
-                                fontSize = arabicFontSize,
-                                lineHeight = arabicLineHeight,
+                                fontFamily = AmiriFontFamily,
+                                fontSize = (arabicFontSize.value + 2f).sp,
+                                lineHeight = (arabicLineHeight.value + 4f).sp,
                                 textAlign = TextAlign.End,
                                 color = NightEmeraldPrimary,
                                 modifier = Modifier.fillMaxWidth()

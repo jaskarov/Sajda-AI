@@ -37,13 +37,19 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import android.content.Intent
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -97,6 +103,9 @@ import com.example.domain.model.WeeklyPrayerAnalytics
 import com.example.domain.model.WeeklyPrayerSummary
 import com.example.domain.model.lText
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LuxuryGold
+import com.example.ui.theme.LuxuryGoldDeep
+import com.example.ui.theme.LuxuryGoldLight
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.theme.SaffronGold
 import com.example.ui.viewmodel.MainUiState
@@ -582,38 +591,54 @@ fun WeeklyProgressScreen(
                 }
             }
 
-            // Summary KPI Row
+            // Summary KPI 2x2 Grid (includes Best Prayer & Last Active Day from 4th mockup)
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    SummaryKpiCard(
-                        title = lText("Jami namoz", "Жами намоз").get(script),
-                        value = "${summary.totalCompleted}/${summary.totalPossible}",
-                        subtitle = "${summary.overallRoundedPercent}%",
-                        modifier = Modifier.weight(1f)
-                    )
-                    SummaryKpiCard(
-                        title = lText("5/5 kunlar", "5/5 кунлар").get(script),
-                        value = "${summary.perfectDaysCount}/7",
-                        subtitle = lText("to‘liq kun", "тўлиқ кун").get(script),
-                        modifier = Modifier.weight(1f)
-                    )
-                    SummaryKpiCard(
-                        title = lText("Eng faol", "Энг фаол").get(script),
-                        value = summary.bestPrayer?.title?.get(script) ?: "—",
-                        subtitle = if (summary.bestPrayer != null) {
-                            val bestMetric = summary.prayerBars.first {
-                                it.prayerType == summary.bestPrayer
-                            }
-                            "${bestMetric.roundedPercent}%"
-                        } else {
-                            "0%"
-                        },
-                        highlightIcon = summary.bestPrayer != null,
-                        modifier = Modifier.weight(1f)
-                    )
+                val lastActiveDay = summary.dailyBars.lastOrNull { it.completedCount > 0 }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SummaryKpiCard(
+                            title = lText("Jami namoz", "Жами намоз").get(script),
+                            value = "${summary.totalCompleted}/${summary.totalPossible}",
+                            subtitle = "${summary.overallRoundedPercent}%",
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryKpiCard(
+                            title = lText("5/5 kunlar", "5/5 кунлар").get(script),
+                            value = "${summary.perfectDaysCount}/7",
+                            subtitle = lText("to‘liq kun", "тўлиқ кун").get(script),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SummaryKpiCard(
+                            title = lText("Eng faol", "Энг фаол").get(script),
+                            value = summary.bestPrayer?.title?.get(script) ?: "—",
+                            subtitle = if (summary.bestPrayer != null) {
+                                val bestMetric = summary.prayerBars.first {
+                                    it.prayerType == summary.bestPrayer
+                                }
+                                "${bestMetric.roundedPercent}%"
+                            } else {
+                                "0%"
+                            },
+                            highlightIcon = summary.bestPrayer != null,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SummaryKpiCard(
+                            title = lText("So‘nggi faol kun", "Сўнгги фаол кун").get(script),
+                            value = lastActiveDay?.shortDate ?: "—",
+                            subtitle = lastActiveDay?.let {
+                                "${it.completedCount}/5 ${lText("namoz", "намоз").get(script)}"
+                            } ?: lText("Hali yo‘q", "Ҳали йўқ").get(script),
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
 
@@ -1206,20 +1231,22 @@ private fun QazoLedgerCard(
 ) {
     val totalRemaining = qazoProgress.totalCount()
     var showCalculator by remember { mutableStateOf(false) }
+    var pubertyAge by remember { mutableIntStateOf(12) }
+    var prayerStartAge by remember { mutableIntStateOf(13) }
     var yearsInput by remember { mutableStateOf("1") }
     val parsedYears = yearsInput.toIntOrNull()?.coerceIn(1, 50) ?: 0
 
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+        border = BorderStroke(0.9.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("qazo_ledger_card")
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1248,7 +1275,12 @@ private fun QazoLedgerCard(
                 Surface(
                     shape = CircleShape,
                     color = if (totalRemaining == 0) PoseMatchedGreen.copy(alpha = 0.18f)
-                    else MaterialTheme.colorScheme.primaryContainer
+                    else LuxuryGold.copy(alpha = 0.2f),
+                    border = BorderStroke(
+                        0.8.dp,
+                        if (totalRemaining == 0) PoseMatchedGreen.copy(alpha = 0.4f)
+                        else LuxuryGold.copy(alpha = 0.45f)
+                    )
                 ) {
                     Text(
                         text = lText(
@@ -1259,7 +1291,7 @@ private fun QazoLedgerCard(
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = if (totalRemaining == 0) PoseMatchedGreen
-                        else MaterialTheme.colorScheme.onPrimaryContainer,
+                        else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                             .testTag("qazo_total_badge")
@@ -1267,54 +1299,123 @@ private fun QazoLedgerCard(
                 }
             }
 
-            // Calculator Toggle + Daily Plan Summary
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Calculator Toggle
+            OutlinedButton(
+                onClick = { showCalculator = !showCalculator },
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.55f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("qazo_calculator_toggle")
             ) {
-                OutlinedButton(
-                    onClick = { showCalculator = !showCalculator },
-                    modifier = Modifier.testTag("qazo_calculator_toggle")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Calculate,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = lText(
-                            "Yillar bo‘yicha kalkulyator",
-                            "Йиллар бўйича калькулятор"
-                        ).get(script),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Calculate,
+                    contentDescription = null,
+                    tint = LuxuryGold,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = lText(
+                        "Yillar bo‘yicha qazo kalkulyatori",
+                        "Йиллар бўйича қазо калькулятори"
+                    ).get(script),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
 
+            // Gemini-1 Style Age-Based Qazo Calculator Panel
             AnimatedVisibility(visible = showCalculator) {
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                    border = BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.42f)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("qazo_calculator_panel")
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = lText(
-                                "Necha yillik qazo namozingiz bor? (1 yil = har bir namozdan 365 ta)",
-                                "Неча йиллик қазо намозингиз бор? (1 йил = ҳар бир намоздан 365 та)"
-                            ).get(script),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface
+                        // Balog'at yoshi stepper
+                        QazoAgeStepperRow(
+                            label = lText("Balog‘at yoshi", "Балоғат ёши").get(script),
+                            value = pubertyAge,
+                            unit = lText("yosh", "ёш").get(script),
+                            onDecrement = {
+                                if (pubertyAge > 9) {
+                                    pubertyAge -= 1
+                                    val diff = (prayerStartAge - pubertyAge).coerceIn(1, 50)
+                                    yearsInput = diff.toString()
+                                }
+                            },
+                            onIncrement = {
+                                if (pubertyAge < 18) {
+                                    pubertyAge += 1
+                                    if (prayerStartAge <= pubertyAge) prayerStartAge = pubertyAge + 1
+                                    val diff = (prayerStartAge - pubertyAge).coerceIn(1, 50)
+                                    yearsInput = diff.toString()
+                                }
+                            },
+                            decTag = "qazo_puberty_dec",
+                            incTag = "qazo_puberty_inc"
                         )
 
+                        // Namoz boshlagan yosh stepper
+                        QazoAgeStepperRow(
+                            label = lText("Namoz boshlagan yoshingiz", "Намоз бошлаган ёшингиз").get(script),
+                            value = prayerStartAge,
+                            unit = lText("yosh", "ёш").get(script),
+                            onDecrement = {
+                                if (prayerStartAge > pubertyAge + 1) {
+                                    prayerStartAge -= 1
+                                    val diff = (prayerStartAge - pubertyAge).coerceIn(1, 50)
+                                    yearsInput = diff.toString()
+                                }
+                            },
+                            onIncrement = {
+                                if (prayerStartAge < 70) {
+                                    prayerStartAge += 1
+                                    val diff = (prayerStartAge - pubertyAge).coerceIn(1, 50)
+                                    yearsInput = diff.toString()
+                                }
+                            },
+                            decTag = "qazo_start_age_dec",
+                            incTag = "qazo_start_age_inc"
+                        )
+
+                        // Calculated summary badge
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = PoseMatchedGreen.copy(alpha = 0.14f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = lText("Hisoblangan qazo:", "Ҳисобланган қазо:").get(script),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = lText(
+                                        "$parsedYears yil (${parsedYears * 365} kun)",
+                                        "$parsedYears йил (${parsedYears * 365} кун)"
+                                    ).get(script),
+                                    fontFamily = JetBrainsMonoFontFamily,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = PoseMatchedGreen
+                                )
+                            }
+                        }
+
+                        // Quick year chips
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1323,7 +1424,11 @@ private fun QazoLedgerCard(
                             listOf(1, 3, 5, 10).forEach { y ->
                                 FilterChip(
                                     selected = yearsInput == y.toString(),
-                                    onClick = { yearsInput = y.toString() },
+                                    onClick = {
+                                        yearsInput = y.toString()
+                                        prayerStartAge = (pubertyAge + y).coerceAtMost(70)
+                                    },
+                                    shape = CircleShape,
                                     label = {
                                         Text(
                                             text = lText("$y yil", "$y йил").get(script),
@@ -1349,10 +1454,11 @@ private fun QazoLedgerCard(
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier
-                                    .width(100.dp)
+                                    .width(88.dp)
                                     .testTag("qazo_years_input")
                             )
 
+                            // Gemini-1 Gold Gradient Apply CTA
                             Button(
                                 onClick = {
                                     if (parsedYears > 0) {
@@ -1361,21 +1467,51 @@ private fun QazoLedgerCard(
                                     }
                                 },
                                 enabled = parsedYears > 0,
+                                contentPadding = PaddingValues(0.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Transparent,
+                                    contentColor = Color(0xFF1A1200)
+                                ),
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(48.dp)
+                                    .height(50.dp)
                                     .testTag("qazo_calculator_apply_button")
                             ) {
-                                Text(
-                                    text = lText(
-                                        "Qo‘shish (+${parsedYears * 365})",
-                                        "Қўшиш (+${parsedYears * 365})"
-                                    ).get(script),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(LuxuryGoldLight, LuxuryGold, LuxuryGoldDeep)
+                                            ),
+                                            shape = RoundedCornerShape(14.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = lText(
+                                            "Qo‘shish (+${parsedYears * 365} ta)",
+                                            "Қўшиш (+${parsedYears * 365} та)"
+                                        ).get(script),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1A1200),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
+
+                        Text(
+                            text = lText(
+                                "Hanafiy mazhabiga ko‘ra 6 ta namoz (Bomdod, Peshin, Asr, Shom, Xufton, Vitr) hisobiga qo‘shiladi.",
+                                "Ҳанафий мазҳабига кўра 6 та намоз (Бомдод, Пешин, Аср, Шом, Хуфтон, Витр) ҳисобига қўшилади."
+                            ).get(script),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -1390,7 +1526,7 @@ private fun QazoLedgerCard(
                     qazoProgress.vitrCount
                 )
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1408,10 +1544,20 @@ private fun QazoLedgerCard(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f))
 
+            // 6 Hanafi Qazo Prayers with Distinct Icons (4th mockup polish)
             QazoPrayerType.entries.forEachIndexed { index, type ->
                 val count = qazoProgress.countFor(type)
+                val (prayerIcon, iconTint) = when (type) {
+                    QazoPrayerType.BOMDOD -> Icons.Default.WbTwilight to LuxuryGold
+                    QazoPrayerType.PESHIN -> Icons.Default.WbSunny to LuxuryGold
+                    QazoPrayerType.ASR -> Icons.Default.WbSunny to Color(0xFF4DD9AC)
+                    QazoPrayerType.SHOM -> Icons.Default.WbTwilight to Color(0xFFE58C64)
+                    QazoPrayerType.XUFTON -> Icons.Default.NightsStay to Color(0xFF83D2E3)
+                    QazoPrayerType.VITR -> Icons.Default.Star to LuxuryGold
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1419,42 +1565,61 @@ private fun QazoLedgerCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Column(
+                    Row(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = type.title.get(script),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = type.rakatSummary.get(script),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        FilledTonalButton(
-                            onClick = { onPrayQazo(type) },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier.testTag("qazo_pray_${type.id}")
+                        Surface(
+                            shape = CircleShape,
+                            color = iconTint.copy(alpha = 0.15f),
+                            modifier = Modifier.size(38.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(4.dp))
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = prayerIcon,
+                                    contentDescription = null,
+                                    tint = iconTint,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                             Text(
-                                text = lText("O‘qish", "Ўқиш").get(script),
-                                style = MaterialTheme.typography.labelMedium
+                                text = type.title.get(script),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
+                            Text(
+                                text = type.rakatSummary.get(script),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FilledTonalButton(
+                                onClick = { onPrayQazo(type) },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                modifier = Modifier.testTag("qazo_pray_${type.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = lText("O‘qish", "Ўқиш").get(script),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilledTonalIconButton(
                             onClick = { onDecrement(type) },
@@ -1485,12 +1650,16 @@ private fun QazoLedgerCard(
                             color = if (count > 0) MaterialTheme.colorScheme.onSurface
                             else PoseMatchedGreen,
                             modifier = Modifier
-                                .widthIn(min = 38.dp)
+                                .widthIn(min = 36.dp)
                                 .testTag("qazo_count_${type.id}")
                         )
 
                         FilledTonalIconButton(
                             onClick = { onIncrement(type) },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
+                                contentColor = MaterialTheme.colorScheme.primary
+                            ),
                             modifier = Modifier
                                 .size(48.dp)
                                 .testTag("qazo_inc_${type.id}")
@@ -1508,6 +1677,59 @@ private fun QazoLedgerCard(
                 if (index < QazoPrayerType.entries.lastIndex) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QazoAgeStepperRow(
+    label: String,
+    value: Int,
+    unit: String,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit,
+    decTag: String,
+    incTag: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilledTonalIconButton(
+                onClick = onDecrement,
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag(decTag)
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+            Text(
+                text = "$value $unit",
+                fontFamily = JetBrainsMonoFontFamily,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            FilledTonalIconButton(
+                onClick = onIncrement,
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag(incTag)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             }
         }
     }

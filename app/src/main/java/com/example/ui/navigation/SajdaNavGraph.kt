@@ -1,6 +1,12 @@
 package com.example.ui.navigation
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,12 +20,16 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MenuBook
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.theme.LuxuryGold
 import com.example.ui.theme.SajdaAiTheme
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -202,10 +213,29 @@ fun SajdaNavGraph(
             Scaffold(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 bottomBar = {
-                    NavigationBar {
+                    val isDarkUi = systemDark || mainUiState.settings.oledNightMode
+                    val navItemColors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = if (isDarkUi) LuxuryGold else MaterialTheme.colorScheme.primary,
+                        selectedTextColor = if (isDarkUi) LuxuryGold else MaterialTheme.colorScheme.primary,
+                        indicatorColor = if (isDarkUi) LuxuryGold.copy(alpha = 0.22f)
+                        else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Column {
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = if (isDarkUi) LuxuryGold.copy(alpha = 0.18f)
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        )
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 0.dp
+                        ) {
                         NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
+                            colors = navItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selectedTab == 0) Icons.Filled.Home
@@ -219,6 +249,7 @@ fun SajdaNavGraph(
                         NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
+                            colors = navItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selectedTab == 1) Icons.Filled.MenuBook
@@ -232,6 +263,7 @@ fun SajdaNavGraph(
                         NavigationBarItem(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
+                            colors = navItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selectedTab == 2) Icons.Filled.BarChart
@@ -245,6 +277,7 @@ fun SajdaNavGraph(
                         NavigationBarItem(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
+                            colors = navItemColors,
                             icon = {
                                 Icon(
                                     imageVector = if (selectedTab == 3) Icons.Filled.Explore
@@ -255,10 +288,18 @@ fun SajdaNavGraph(
                             label = { Text(lText("Qibla", "Қибла").get(script)) },
                             modifier = Modifier.testTag("nav_qibla")
                         )
+                        }
                     }
                 }
             ) { innerPadding ->
-                when (selectedTab) {
+                AnimatedContent(
+                    targetState = selectedTab,
+                    transitionSpec = {
+                        fadeIn(tween(200)) togetherWith fadeOut(tween(140))
+                    },
+                    label = "main_tab_transition"
+                ) { activeTab ->
+                when (activeTab) {
                     0 -> HomeScreen(
                         uiState = mainUiState,
                         onStartPrayer = { track ->
@@ -327,6 +368,7 @@ fun SajdaNavGraph(
                             modifier = Modifier.padding(innerPadding)
                         )
                     }
+                }
                 }
             }
         }

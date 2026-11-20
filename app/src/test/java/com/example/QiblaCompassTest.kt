@@ -95,7 +95,8 @@ class QiblaCompassTest {
             }
         }
 
-        composeRule.onNodeWithText("Qibla yo‘nalishi topildi!").assertIsDisplayed()
+        composeRule.onNodeWithText("(Janub-G‘arb)").assertIsDisplayed()
+        composeRule.onNodeWithText("Qibla topildi (±5°)").assertIsDisplayed()
         composeRule.onNodeWithTag("qibla_compass_dial").assertIsDisplayed()
         composeRule.onNodeWithTag("compass_azimuth_value").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("qibla_kaaba_distance").performScrollTo().assertIsDisplayed()

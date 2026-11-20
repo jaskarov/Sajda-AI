@@ -28,6 +28,12 @@ val JetBrainsMonoFontFamily = FontFamily(
     Font(R.font.jetbrains_mono, FontWeight.Bold)
 )
 
+val AmiriFontFamily = FontFamily(
+    Font(R.font.amiri, FontWeight.Normal),
+    Font(R.font.amiri, FontWeight.Medium),
+    Font(R.font.amiri, FontWeight.Bold)
+)
+
 val AppTypography = Typography(
     displayLarge = TextStyle(
         fontFamily = RubikFontFamily,

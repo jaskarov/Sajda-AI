@@ -78,8 +78,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.domain.engine.UzbekistanCities
+import com.example.domain.model.TextScript
 import com.example.domain.model.lText
+import com.example.ui.theme.DeepHeroGradientEnd
+import com.example.ui.theme.DeepHeroGradientStart
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LuxuryGold
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.theme.PoseWarningAmber
 import com.example.ui.theme.SaffronGold
@@ -218,7 +222,7 @@ fun QiblaScreen(
     var isDetectingLocation by remember { mutableStateOf(false) }
     val textMeasurer = rememberTextMeasurer()
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val cardinalLayouts = remember(textMeasurer, onSurfaceVariantColor) {
+    val cardinalLayouts = remember(textMeasurer) {
         listOf(
             Triple(0, "N", textMeasurer.measure(
                 text = "N",
@@ -226,7 +230,7 @@ fun QiblaScreen(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp,
-                    color = Color(0xFFD94A4A)
+                    color = Color(0xFFFF5C5C)
                 )
             )),
             Triple(90, "E", textMeasurer.measure(
@@ -235,7 +239,7 @@ fun QiblaScreen(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
-                    color = onSurfaceVariantColor
+                    color = Color.White.copy(alpha = 0.88f)
                 )
             )),
             Triple(180, "S", textMeasurer.measure(
@@ -244,7 +248,7 @@ fun QiblaScreen(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
-                    color = onSurfaceVariantColor
+                    color = Color.White.copy(alpha = 0.88f)
                 )
             )),
             Triple(270, "W", textMeasurer.measure(
@@ -253,10 +257,13 @@ fun QiblaScreen(
                     fontFamily = JetBrainsMonoFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
-                    color = onSurfaceVariantColor
+                    color = Color.White.copy(alpha = 0.88f)
                 )
             ))
         )
+    }
+    val compassDirectionLabel = remember(displayQiblaDeg, script) {
+        compassDirectionName(displayQiblaDeg, script)
     }
 
     Box(
@@ -270,9 +277,9 @@ fun QiblaScreen(
                 .widthIn(max = 600.dp)
                 .align(Alignment.TopCenter)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -281,7 +288,8 @@ fun QiblaScreen(
             ) {
                 Text(
                     text = lText("Qibla kompasi", "Қибла компаси").get(script),
-                    style = MaterialTheme.typography.headlineMedium
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
                 )
                 Surface(
                     shape = CircleShape,
@@ -292,7 +300,7 @@ fun QiblaScreen(
                     )
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -310,38 +318,55 @@ fun QiblaScreen(
                 }
             }
 
+            // Top Emerald Direction Hero Card (4th-mockup style: 240° Janub-G'arb)
             Surface(
-                shape = CircleShape,
-                color = if (isAligned) PoseMatchedGreen.copy(alpha = 0.16f)
-                else MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(18.dp),
+                color = DeepHeroGradientStart,
                 border = BorderStroke(
                     1.dp,
-                    if (isAligned) PoseMatchedGreen.copy(alpha = 0.55f)
-                    else Color.Transparent
-                )
+                    if (isAligned) PoseMatchedGreen.copy(alpha = 0.85f)
+                    else LuxuryGold.copy(alpha = 0.42f)
+                ),
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(DeepHeroGradientStart, DeepHeroGradientEnd)
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = if (isAligned) Icons.Default.CheckCircle else Icons.Default.Explore,
-                        contentDescription = null,
-                        tint = if (isAligned) PoseMatchedGreen else MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(8.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                        Text(
+                            text = lText("Qibla yo‘nalishi", "Қибла йўналиши").get(script),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Color.White.copy(alpha = 0.85f)
+                        )
+                        Text(
+                            text = "($compassDirectionLabel)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = LuxuryGold
+                        )
+                    }
                     Text(
-                        text = turnGuidance,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (isAligned) PoseMatchedGreen
-                        else MaterialTheme.colorScheme.onPrimaryContainer
+                        text = "$displayQiblaDeg°",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 30.sp,
+                        color = Color.White
                     )
                 }
             }
 
             if (!compassState.isLevel) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = PoseWarningAmber.copy(alpha = 0.14f),
                     border = BorderStroke(1.dp, PoseWarningAmber.copy(alpha = 0.55f)),
                     modifier = Modifier
@@ -349,14 +374,14 @@ fun QiblaScreen(
                         .testTag("qibla_level_hint_banner")
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.ScreenLockRotation,
                             contentDescription = null,
                             tint = PoseWarningAmber,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
@@ -364,7 +389,7 @@ fun QiblaScreen(
                                 "Aniq natija uchun telefonni yer bilan tekis (gorizontal) tuting",
                                 "Аниқ натижа учун телефонни ер билан текис (горизонтал) тутинг"
                             ).get(script),
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -374,8 +399,8 @@ fun QiblaScreen(
             // Compass Dial Canvas
             Box(
                 modifier = Modifier
-                    .size(310.dp)
-                    .padding(4.dp)
+                    .size(220.dp)
+                    .padding(2.dp)
                     .testTag("qibla_compass_dial"),
                 contentAlignment = Alignment.Center
             ) {
@@ -405,12 +430,13 @@ fun QiblaScreen(
                         color = if (isAligned) PoseMatchedGreen else primaryColor
                     )
 
-                    // Dial background with subtle depth gradient
+                    // Deep Luxury Emerald Dial background (4th-mockup style)
                     drawCircle(
                         brush = Brush.radialGradient(
                             colors = listOf(
-                                surfaceColor,
-                                surfaceVariantColor.copy(alpha = 0.45f)
+                                Color(0xFF10402D),
+                                Color(0xFF0A2A1E),
+                                Color(0xFF061912)
                             ),
                             center = center,
                             radius = outerRadius
@@ -486,10 +512,10 @@ fun QiblaScreen(
                             val outer = outerRadius - 4f
                             drawLine(
                                 color = when {
-                                    deg == 0 -> Color(0xFFD94A4A)
-                                    isCardinal -> primaryColor
-                                    isMajor -> onSurfaceColor.copy(alpha = 0.65f)
-                                    else -> outlineColor.copy(alpha = 0.45f)
+                                    deg == 0 -> Color(0xFFFF5C5C)
+                                    isCardinal -> LuxuryGold
+                                    isMajor -> Color.White.copy(alpha = 0.72f)
+                                    else -> Color.White.copy(alpha = 0.28f)
                                 },
                                 start = Offset(
                                     center.x + (inner * cos(rad)).toFloat(),
@@ -610,11 +636,49 @@ fun QiblaScreen(
                 }
             }
 
+            // Prominent Green Alignment Confirmation Banner (4th-mockup style)
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = if (isAligned) PoseMatchedGreen.copy(alpha = 0.22f)
+                else MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    1.2.dp,
+                    if (isAligned) PoseMatchedGreen else LuxuryGold.copy(alpha = 0.45f)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (isAligned) Icons.Default.CheckCircle else Icons.Default.Explore,
+                        contentDescription = null,
+                        tint = if (isAligned) PoseMatchedGreen else LuxuryGold,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = if (isAligned) {
+                            lText("Qibla topildi (±5°)", "Қибла топилди (±5°)").get(script)
+                        } else {
+                            turnGuidance
+                        },
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAligned) PoseMatchedGreen else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
             // Telemetry card
             Card(
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)),
+                border = BorderStroke(0.9.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -833,4 +897,18 @@ fun QiblaScreen(
             }
         }
     }
+}
+
+private fun compassDirectionName(degrees: Int, script: TextScript): String {
+    val norm = ((degrees % 360) + 360) % 360
+    return when {
+        norm < 23 || norm >= 338 -> lText("Shimol", "Шимол")
+        norm < 68 -> lText("Shimoli-Sharq", "Шимоли-Шарқ")
+        norm < 113 -> lText("Sharq", "Шарқ")
+        norm < 158 -> lText("Janubi-Sharq", "Жануби-Шарқ")
+        norm < 203 -> lText("Janub", "Жануб")
+        norm < 248 -> lText("Janub-G‘arb", "Жануб-Ғарб")
+        norm < 293 -> lText("G‘arb", "Ғарб")
+        else -> lText("Shimoli-G‘arb", "Шимоли-Ғарб")
+    }.get(script)
 }

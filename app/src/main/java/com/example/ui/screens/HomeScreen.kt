@@ -5,17 +5,23 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,26 +40,27 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
-import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,34 +68,45 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.core.content.ContextCompat
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import com.example.R
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.PrayerTimeSlot
 import com.example.domain.model.PrayerTrack
 import com.example.domain.model.PrayerType
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
-import com.example.ui.theme.DeepHeroGradientEnd
 import com.example.ui.theme.DeepHeroGradientStart
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LuxuryGold
+import com.example.ui.theme.LuxuryGoldDeep
+import com.example.ui.theme.LuxuryGoldLight
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.theme.SaffronGold
+import com.example.ui.theme.prayerSkyAtmosphere
 import com.example.ui.viewmodel.MainUiState
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -108,6 +126,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val schedule = uiState.schedule
     val script = uiState.settings.script
+    val oledMode = uiState.settings.oledNightMode
     var showCitySheet by remember { mutableStateOf(false) }
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -124,6 +143,37 @@ fun HomeScreen(
     }
     var selectedTrack by remember(defaultTrack) { mutableStateOf(defaultTrack) }
 
+    // Dynamic 5-prayer time-of-day sky atmosphere
+    val targetAtmosphere = remember(schedule.currentPrayer.id, oledMode) {
+        prayerSkyAtmosphere(schedule.currentPrayer.id, oledMode)
+    }
+    val skyStart by animateColorAsState(
+        targetValue = targetAtmosphere.startColor,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "hero_sky_start"
+    )
+    val skyMid by animateColorAsState(
+        targetValue = targetAtmosphere.midColor,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "hero_sky_mid"
+    )
+    val skyEnd by animateColorAsState(
+        targetValue = targetAtmosphere.endColor,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "hero_sky_end"
+    )
+    val skyGlow by animateColorAsState(
+        targetValue = targetAtmosphere.accentGlow,
+        animationSpec = spring(stiffness = Spring.StiffnessLow),
+        label = "hero_sky_glow"
+    )
+
+    val timeOfDayIcon = when (schedule.currentPrayer) {
+        PrayerType.BOMDOD, PrayerType.SHOM -> Icons.Default.WbTwilight
+        PrayerType.QUYOSH, PrayerType.PESHIN, PrayerType.ASR -> Icons.Default.WbSunny
+        PrayerType.XUFTON -> Icons.Default.NightsStay
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -135,10 +185,10 @@ fun HomeScreen(
                 .widthIn(max = 600.dp)
                 .align(Alignment.TopCenter)
                 .testTag("home_prayer_list"),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Top Header: Location & Settings
+            // 1. Minimalist Editorial Header: Location Pill + OLED + Settings
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -149,7 +199,11 @@ fun HomeScreen(
                         onClick = { showCitySheet = true },
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)),
+                        tonalElevation = if (oledMode) 0.dp else 1.dp,
+                        border = BorderStroke(
+                            width = 0.8.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
+                        ),
                         modifier = Modifier.testTag("city_picker_button")
                     ) {
                         Row(
@@ -167,282 +221,413 @@ fun HomeScreen(
                                 text = "${schedule.city.name.get(script)}, ${
                                     lText("O‘zbekiston", "Ўзбекистон").get(script)
                                 }",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(
-                            onClick = { onToggleOledNightMode(!uiState.settings.oledNightMode) },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("home_oled_toggle_button")
-                        ) {
-                            Icon(
-                                imageVector = if (uiState.settings.oledNightMode) Icons.Default.LightMode
-                                else Icons.Default.DarkMode,
-                                contentDescription = lText(
-                                    "Bomdod OLED tungi rejim",
-                                    "Бомдод OLED тунги режим"
-                                ).get(script),
-                                tint = if (uiState.settings.oledNightMode) SaffronGold
-                                else MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onOpenSettings,
-                            modifier = Modifier
-                                .size(48.dp)
-                                .testTag("settings_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Settings,
-                                contentDescription = lText("Sozlamalar", "Созламалар").get(script),
-                                tint = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Hero Countdown & CTA Card
-            item {
-                val heroGradient = if (uiState.settings.oledNightMode) {
-                    listOf(Color(0xFF061A13), Color(0xFF020806))
-                } else {
-                    listOf(DeepHeroGradientStart, DeepHeroGradientEnd)
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(Brush.linearGradient(heroGradient))
-                ) {
-                    // Subtle decorative mihrab arches in background
-                    Canvas(modifier = Modifier.matchParentSize()) {
-                        val archPath = Path().apply {
-                            val w = size.width
-                            val h = size.height
-                            moveTo(w * 0.65f, h)
-                            lineTo(w * 0.65f, h * 0.45f)
-                            quadraticTo(w * 0.82f, h * 0.12f, w * 0.98f, h * 0.45f)
-                            lineTo(w * 0.98f, h)
-                        }
-                        drawPath(
-                            path = archPath,
-                            color = Color.White.copy(alpha = 0.08f),
-                            style = Stroke(width = 3f)
-                        )
-                        drawCircle(
-                            color = SaffronGold.copy(alpha = 0.12f),
-                            radius = size.height * 0.35f,
-                            center = Offset(size.width * 0.88f, size.height * 0.22f)
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "${
-                                lText("KEYINGI NAMOZ:", "КЕЙИНГИ НАМОЗ:").get(script)
-                            } ${schedule.nextPrayer.title.get(script).uppercase()} (${schedule.nextPrayerTimeFormatted})",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xFFFFE5A3),
-                            letterSpacing = 0.8.sp
-                        )
-
-                        // Self-contained 1-second countdown (recomposes ONLY this text, never MainUiState)
-                        HomeCountdownText(
-                            initialSeconds = schedule.countdownSeconds,
-                            prayerKey = "${schedule.nextPrayer.id}_${schedule.nextPrayerTimeFormatted}"
-                        )
-
-                        Text(
-                            text = "${schedule.hijriLabel.get(script)} • ${
-                                lText(
-                                    "Hozirgi vaqt: ${schedule.currentPrayer.title.latin}",
-                                    "Ҳозирги вақт: ${schedule.currentPrayer.title.cyrillic}"
-                                ).get(script)
-                            }",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color.White.copy(alpha = 0.84f)
-                        )
-
-                        Button(
-                            onClick = { onStartPrayer(selectedTrack) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp)
-                                .testTag("start_current_prayer_button"),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SaffronGold,
-                                contentColor = Color(0xFF1B1400)
-                            )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text = lText(
-                                    "HOZIRGI NAMOZNI O‘QISH",
-                                    "ҲОЗИРГИ НАМОЗНИ ЎҚИШ"
-                                ).get(script),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        val chainedNextTrack = selectedTrack.nextContinuationTrack()
-                        if (chainedNextTrack != null) {
-                            Text(
-                                text = lText(
-                                    "Uzluksiz oqim: ${selectedTrack.title.latin} → ${chainedNextTrack.title.latin}",
-                                    "Узлуксиз оқим: ${selectedTrack.title.cyrillic} → ${chainedNextTrack.title.cyrillic}"
-                                ).get(script),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFFFFE5A3)
-                            )
-                        }
-
-                        // Dynamic Quick Rakat / Track Chips for the current prayer time
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState())
-                                .testTag("home_quick_tracks_row"),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            quickTracks.forEach { track ->
-                                val isSelected = track == selectedTrack
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { selectedTrack = track },
-                                    label = {
-                                        Text(
-                                            text = track.title.get(script),
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        containerColor = Color.White.copy(alpha = 0.12f),
-                                        labelColor = Color.White.copy(alpha = 0.9f),
-                                        selectedContainerColor = Color.White,
-                                        selectedLabelColor = DeepHeroGradientStart
-                                    ),
-                                    border = null,
-                                    modifier = Modifier.testTag("track_chip_${track.id}")
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Direct Wudu / Ghusl / Tayammum shortcut for Beginners
-            item {
-                Card(
-                    onClick = onOpenWuduGuide,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
-                    ),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("home_open_wudu_button")
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.WaterDrop,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = lText(
-                                    "Tahorat, G‘usl va Tayammum tartibi",
-                                    "Таҳорат, Ғусл ва Таяммум тартиби"
-                                ).get(script),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = lText(
-                                    "Namozdan oldingi 8 qadam va 4 farzni ovozli o‘rganing",
-                                    "Намоздан олдинги 8 қадам ва 4 фарзни овозли ўрганинг"
-                                ).get(script),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
-                        Text(
-                            text = lText("Ochish", "Очиш").get(script),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = if (oledMode) SaffronGold.copy(alpha = 0.16f)
+                            else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                0.8.dp,
+                                if (oledMode) SaffronGold.copy(alpha = 0.45f)
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        ) {
+                            IconButton(
+                                onClick = { onToggleOledNightMode(!oledMode) },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("home_oled_toggle_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (oledMode) Icons.Default.LightMode
+                                    else Icons.Default.DarkMode,
+                                    contentDescription = lText(
+                                        "Bomdod OLED tungi rejim",
+                                        "Бомдод OLED тунги режим"
+                                    ).get(script),
+                                    tint = if (oledMode) SaffronGold
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                0.8.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        ) {
+                            IconButton(
+                                onClick = onOpenSettings,
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("settings_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = lText("Sozlamalar", "Созламалар").get(script),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
 
-            // Interactive Step-by-Step Prayer Guide (Onboarding Walkthrough)
+            // 2. Dynamic 5-Prayer Sky Atmosphere + Samarkand Girih Hero Card
             item {
-                Card(
-                    onClick = onOpenPrayerGuide,
-                    shape = RoundedCornerShape(18.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                    ),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-                    ),
+                Surface(
+                    shape = RoundedCornerShape(30.dp),
+                    color = skyStart,
+                    border = if (oledMode) {
+                        BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.35f))
+                    } else {
+                        BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.42f))
+                    },
+                    shadowElevation = if (oledMode) 0.dp else 8.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        // Layer 1: Dynamic Time-of-Day Sky Gradient
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(skyStart, skyMid, skyEnd),
+                                        start = Offset(0f, 0f),
+                                        end = Offset(900f, 900f)
+                                    )
+                                )
+                        )
+
+                        // Layer 2: Bespoke Samarkand Mosque & Girih Artwork subtly blended
+                        Image(
+                            painter = painterResource(id = R.drawable.img_hero_mosque_1795154346302),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .alpha(if (oledMode) 0.14f else 0.26f)
+                        )
+
+                        // Layer 3: Legibility scrim + delicate geometric Girih star & horizon glow
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            skyStart.copy(alpha = if (oledMode) 0.72f else 0.45f),
+                                            skyMid.copy(alpha = if (oledMode) 0.65f else 0.52f),
+                                            skyStart.copy(alpha = if (oledMode) 0.90f else 0.78f)
+                                        )
+                                    )
+                                )
+                        )
+
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            // Subtle 8-point Samarkand Rub-el-Hizb girih star in top-right corner
+                            val cx = size.width * 0.88f
+                            val cy = size.height * 0.22f
+                            val outerR = size.minDimension * 0.24f
+                            val innerR = outerR * 0.62f
+                            val starPath = Path()
+                            for (i in 0 until 16) {
+                                val angle = (i * 22.5) * PI / 180.0
+                                val r = if (i % 2 == 0) outerR else innerR
+                                val x = cx + (r * cos(angle)).toFloat()
+                                val y = cy + (r * sin(angle)).toFloat()
+                                if (i == 0) starPath.moveTo(x, y) else starPath.lineTo(x, y)
+                            }
+                            starPath.close()
+                            drawPath(
+                                path = starPath,
+                                color = skyGlow.copy(alpha = if (oledMode) 0.10f else 0.16f),
+                                style = Stroke(width = 1.6f)
+                            )
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    colors = listOf(
+                                        skyGlow.copy(alpha = if (oledMode) 0.08f else 0.18f),
+                                        Color.Transparent
+                                    ),
+                                    center = Offset(cx, cy),
+                                    radius = outerR * 1.9f
+                                ),
+                                radius = outerR * 1.9f,
+                                center = Offset(cx, cy)
+                            )
+                        }
+
+                        // Layer 4: Foreground Typography & Controls
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 18.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Dynamic Prayer Time Atmosphere Pill
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.Black.copy(alpha = 0.26f),
+                                border = BorderStroke(1.dp, skyGlow.copy(alpha = 0.35f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = timeOfDayIcon,
+                                        contentDescription = null,
+                                        tint = targetAtmosphere.badgeTint,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = "${
+                                            lText("KEYINGI:", "КЕЙИНГИ:").get(script)
+                                        } ${schedule.nextPrayer.title.get(script).uppercase()} • ${schedule.nextPrayerTimeFormatted}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = targetAtmosphere.badgeTint,
+                                        letterSpacing = 0.7.sp
+                                    )
+                                }
+                            }
+
+                            // Self-contained 1-second countdown (recomposes ONLY this text)
+                            HomeCountdownText(
+                                initialSeconds = schedule.countdownSeconds,
+                                prayerKey = "${schedule.nextPrayer.id}_${schedule.nextPrayerTimeFormatted}"
+                            )
+
+                            Text(
+                                text = "${schedule.hijriLabel.get(script)}  •  ${
+                                    lText(
+                                        "Hozir: ${schedule.currentPrayer.title.latin}",
+                                        "Ҳозир: ${schedule.currentPrayer.title.cyrillic}"
+                                    ).get(script)
+                                }",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.86f)
+                            )
+
+                            Spacer(Modifier.height(2.dp))
+
+                            Button(
+                                onClick = { onStartPrayer(selectedTrack) },
+                                contentPadding = PaddingValues(0.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .testTag("start_current_prayer_button"),
+                                shape = RoundedCornerShape(18.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.Transparent,
+                                    contentColor = Color(0xFF1A1200)
+                                )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    LuxuryGoldLight,
+                                                    LuxuryGold,
+                                                    LuxuryGoldDeep
+                                                )
+                                            ),
+                                            shape = RoundedCornerShape(18.dp)
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1A1200),
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                        Spacer(Modifier.width(8.dp))
+                                        Text(
+                                            text = lText(
+                                                "HOZIRGI NAMOZNI O‘QISH",
+                                                "ҲОЗИРГИ НАМОЗНИ ЎҚИШ"
+                                            ).get(script),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1A1200)
+                                        )
+                                    }
+                                }
+                            }
+
+                            val chainedNextTrack = selectedTrack.nextContinuationTrack()
+                            if (chainedNextTrack != null) {
+                                Text(
+                                    text = lText(
+                                        "Uzluksiz oqim: ${selectedTrack.title.latin} → ${chainedNextTrack.title.latin}",
+                                        "Узлуксиз оқим: ${selectedTrack.title.cyrillic} → ${chainedNextTrack.title.cyrillic}"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = targetAtmosphere.badgeTint.copy(alpha = 0.92f)
+                                )
+                            }
+
+                            // Sleek Translucent Track Selector Chips
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .testTag("home_quick_tracks_row"),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                quickTracks.forEach { track ->
+                                    val isSelected = track == selectedTrack
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { selectedTrack = track },
+                                        label = {
+                                            Text(
+                                                text = track.title.get(script),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        },
+                                        shape = CircleShape,
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = Color.White.copy(alpha = 0.14f),
+                                            labelColor = Color.White.copy(alpha = 0.92f),
+                                            selectedContainerColor = Color.White,
+                                            selectedLabelColor = DeepHeroGradientStart
+                                        ),
+                                        border = null,
+                                        modifier = Modifier.testTag("track_chip_${track.id}")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Compact 2-Column Editorial Quick Action Tiles (Replaces noisy stacked banners)
+            item {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("home_open_prayer_guide_button")
+                        .height(IntrinsicSize.Max),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
+                    // Left Tile: Wudu / Purification with Bespoke Ceramic Water Vessel Art
+                    Surface(
+                        onClick = onOpenWuduGuide,
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = if (oledMode) 0.dp else 1.dp,
+                        border = BorderStroke(
+                            0.8.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                        ),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .testTag("home_open_wudu_button")
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                            modifier = Modifier.size(40.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Image(
+                                painter = painterResource(id = R.drawable.img_wudu_art_1795154345207),
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = lText("Tahorat", "Таҳорат").get(script),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = lText("8 qadam • 4 farz", "8 қадам • 4 фарз").get(script),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    // Right Tile: Interactive 6-Step Prayer Guide
+                    Surface(
+                        onClick = onOpenPrayerGuide,
+                        shape = RoundedCornerShape(22.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        tonalElevation = if (oledMode) 0.dp else 1.dp,
+                        border = BorderStroke(
+                            0.8.dp,
+                            MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .testTag("home_open_prayer_guide_button")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(
+                                        Brush.linearGradient(
+                                            listOf(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                                                SaffronGold.copy(alpha = 0.22f)
+                                            )
+                                        )
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.MenuBook,
                                     contentDescription = null,
@@ -450,92 +635,133 @@ fun HomeScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = lText("Namoz tartibi", "Намоз тартиби").get(script),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = lText("6 qadam • Jonli", "6 қадам • Жонли").get(script),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = lText(
-                                    "Namoz o‘qish tartibi (6 qadam)",
-                                    "Намоз ўқиш тартиби (6 қадам)"
-                                ).get(script),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = lText(
-                                    "Takbirdan salomgacha jonli animatsiya va ovozli qo‘llanma",
-                                    "Такбирдан саломгача жонли анимация ва овозли қўлланма"
-                                ).get(script),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text(
-                            text = lText("Ko‘rish", "Кўриш").get(script),
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
                     }
                 }
             }
 
-            // Section Title + Streak Badge
+            // 4. Unified Schedule Header + Daily Progress Pill
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = lText("Bugungi vaqtlar:", "Бугунги вақтлар:").get(script),
+                        text = lText("Bugungi vaqtlar", "Бугунги вақтлар").get(script),
                         style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Surface(
                         onClick = onOpenWeeklyStats,
                         shape = CircleShape,
-                        color = MaterialTheme.colorScheme.primaryContainer,
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
                         modifier = Modifier.testTag("open_weekly_stats_badge")
                     ) {
                         val completedCount = uiState.todayProgress?.completedCount() ?: 0
-                        Text(
-                            text = lText(
-                                "Bugun: $completedCount / 5 namoz",
-                                "Бугун: $completedCount / 5 намоз"
-                            ).get(script),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (completedCount == 5) PoseMatchedGreen
+                                        else MaterialTheme.colorScheme.primary
+                                    )
+                            )
+                            Text(
+                                text = lText(
+                                    "Bugun: $completedCount / 5",
+                                    "Бугун: $completedCount / 5"
+                                ).get(script),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
                     }
                 }
             }
 
-            // Prayer Time Rows
-            items(schedule.slots, key = { it.type.id }) { slot ->
-                PrayerTimeSlotRow(
-                    slot = slot,
-                    script = script,
-                    onStartTrack = {
-                        if (slot.type.isPrayable) {
-                            onStartPrayer(PrayerTrack.defaultForPrayer(slot.type))
+            // 5. Unified Modern Prayer Schedule Table (Single Elegant Surface with Soft Glow Active Row)
+            item(key = "unified_prayer_schedule") {
+                Surface(
+                    shape = RoundedCornerShape(26.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = if (oledMode) 0.dp else 1.dp,
+                    border = BorderStroke(
+                        0.8.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                    ) {
+                        schedule.slots.forEachIndexed { index, slot ->
+                            PrayerTimeSlotRow(
+                                slot = slot,
+                                script = script,
+                                onStartTrack = {
+                                    if (slot.type.isPrayable) {
+                                        onStartPrayer(PrayerTrack.defaultForPrayer(slot.type))
+                                    }
+                                },
+                                onToggleCompleted = { onToggleCompleted(slot.type) },
+                                onToggleAlarm = {
+                                    if (!slot.alarmEnabled &&
+                                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                        ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.POST_NOTIFICATIONS
+                                        ) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        notificationPermissionLauncher.launch(
+                                            Manifest.permission.POST_NOTIFICATIONS
+                                        )
+                                    }
+                                    onToggleAlarm(slot.type)
+                                }
+                            )
+                            if (index < schedule.slots.lastIndex && !slot.isCurrent && !schedule.slots[index + 1].isCurrent) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 20.dp),
+                                    thickness = 0.5.dp,
+                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+                                )
+                            }
                         }
-                    },
-                    onToggleCompleted = { onToggleCompleted(slot.type) },
-                    onToggleAlarm = {
-                        if (!slot.alarmEnabled &&
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.POST_NOTIFICATIONS
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                        onToggleAlarm(slot.type)
                     }
-                )
+                }
             }
         }
     }
@@ -565,7 +791,7 @@ fun HomeScreen(
                             },
                             shape = RoundedCornerShape(16.dp),
                             color = if (active) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                         ) {
                             Row(
                                 modifier = Modifier
@@ -610,31 +836,41 @@ private fun PrayerTimeSlotRow(
     onToggleCompleted: () -> Unit,
     onToggleAlarm: () -> Unit
 ) {
-    val containerColor = when {
-        slot.isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
-        else -> MaterialTheme.colorScheme.surface
-    }
-    val borderColor = if (slot.isCurrent) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-    }
+    val rowBg by animateColorAsState(
+        targetValue = if (slot.isCurrent) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
+        } else {
+            Color.Transparent
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "prayer_row_bg_${slot.type.id}"
+    )
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(if (slot.isCurrent) 1.5.dp else 1.dp, borderColor),
+    val rowShape = RoundedCornerShape(18.dp)
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = if (slot.isCurrent) 8.dp else 4.dp, vertical = 2.dp)
+            .clip(rowShape)
+            .background(rowBg)
             .clickable(enabled = slot.type.isPrayable, onClick = onStartTrack)
             .testTag("prayer_slot_${slot.type.id}")
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 2.dp),
+                .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Subtle Glowing Vertical Accent Indicator on Current Prayer
+            Box(
+                modifier = Modifier
+                    .width(3.5.dp)
+                    .height(if (slot.isCurrent) 28.dp else 0.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+
             IconButton(
                 onClick = onToggleCompleted,
                 enabled = slot.type.isPrayable,
@@ -647,46 +883,62 @@ private fun PrayerTimeSlotRow(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = lText("O‘qildi", "Ўқилди").get(script),
                         tint = PoseMatchedGreen,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(23.dp)
                     )
                     slot.isCurrent -> Icon(
                         imageVector = Icons.Default.RadioButtonChecked,
                         contentDescription = lText("Hozirgi", "Ҳозирги").get(script),
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(23.dp)
                     )
                     else -> Icon(
                         imageVector = Icons.Default.RadioButtonUnchecked,
                         contentDescription = lText("Belgilanmagan", "Белгиланмаган").get(script),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(24.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.width(4.dp))
-
             Column(modifier = Modifier.weight(1f)) {
-                val nowSuffix = if (slot.isCurrent) {
-                    " (${lText("Hozir", "Ҳозир").get(script)})"
-                } else ""
-                Text(
-                    text = "${slot.type.title.get(script)}$nowSuffix",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = slot.type.title.get(script),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (slot.isCurrent) FontWeight.Bold else FontWeight.Medium,
+                        color = if (slot.isCurrent) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (slot.isCurrent) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Text(
+                                text = lText("Hozir", "Ҳозир").get(script),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Text(
                 text = slot.timeFormatted,
                 fontFamily = JetBrainsMonoFontFamily,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = if (slot.isCurrent) FontWeight.Bold else FontWeight.SemiBold,
                 fontSize = 17.sp,
                 color = if (slot.isCurrent) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.onSurface
             )
 
-            Spacer(Modifier.width(8.dp))
+            Spacer(Modifier.width(4.dp))
 
             IconButton(
                 onClick = onToggleAlarm,
@@ -699,7 +951,8 @@ private fun PrayerTimeSlotRow(
                     else Icons.Default.NotificationsOff,
                     contentDescription = lText("Eslatma", "Эслатма").get(script),
                     tint = if (slot.alarmEnabled) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f),
+                    modifier = Modifier.size(21.dp)
                 )
             }
         }
@@ -727,7 +980,8 @@ private fun HomeCountdownText(
         text = formatCountdown(remainingSec),
         fontFamily = JetBrainsMonoFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
+        fontSize = 34.sp,
+        letterSpacing = 1.sp,
         color = Color.White,
         modifier = Modifier.testTag("home_countdown_text")
     )

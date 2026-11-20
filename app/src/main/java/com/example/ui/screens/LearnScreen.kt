@@ -1,6 +1,16 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,15 +26,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.Analytics
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.WaterDrop
@@ -34,7 +47,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -48,12 +63,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.data.local.DailyPrayerProgressEntity
 import com.example.data.local.PrayerHistoryEntity
 import com.example.domain.engine.PrayerContentCatalog
@@ -64,7 +85,9 @@ import com.example.domain.model.PurificationCategory
 import com.example.domain.model.PurificationGuideItem
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
+import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LuxuryGold
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.viewmodel.MainUiState
 import java.text.SimpleDateFormat
@@ -157,7 +180,14 @@ fun LearnScreen(
                 }
             }
 
-            when (selectedTab) {
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    fadeIn(tween(200)) togetherWith fadeOut(tween(150))
+                },
+                label = "learn_tab_content"
+            ) { activeTab ->
+            when (activeTab) {
                 0 -> LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -397,34 +427,66 @@ fun LearnScreen(
                     ) {
                         item {
                             Card(
-                                shape = RoundedCornerShape(20.dp),
+                                shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(
+                                    0.8.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)
                                 ),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("wudu_farz_summary_card")
                             ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(
-                                        text = lText(
-                                            "Tahoratning 4 ta farzi (Hanafiy)",
-                                            "Таҳоратнинг 4 та фарзи (Ҳанафий)"
-                                        ).get(script),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                Column {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(148.dp)
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = R.drawable.img_wudu_art_1795154345207),
+                                            contentDescription = lText(
+                                                "Tahorat poklik ramzi",
+                                                "Таҳорат поклик рамзи"
+                                            ).get(script),
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        listOf(
+                                                            Color.Transparent,
+                                                            Color.Black.copy(alpha = 0.58f)
+                                                        )
+                                                    )
+                                                )
+                                        )
+                                        Text(
+                                            text = lText(
+                                                "Tahoratning 4 ta farzi (Hanafiy)",
+                                                "Таҳоратнинг 4 та фарзи (Ҳанафий)"
+                                            ).get(script),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier
+                                                .align(Alignment.BottomStart)
+                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                        )
+                                    }
                                     Text(
                                         text = lText(
                                             "1. Yuzni yuvish • 2. Qo‘llarni tirsakkacha yuvish • 3. Boshning 1/4 qismiga mas’h tortish • 4. Oyoqlarni to‘piqgacha yuvish.",
                                             "1. Юзни ювиш • 2. Қўлларни тирсаккача ювиш • 3. Бошнинг 1/4 қисмига масъҳ тортиш • 4. Оёқларни тўпиқгача ювиш."
                                         ).get(script),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
                                     )
                                 }
                             }
@@ -543,76 +605,174 @@ fun LearnScreen(
                     }
                 }
 
-                2 -> LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(PrayerContentCatalog.surahs, key = { it.id }) { surah ->
-                        Card(
-                            shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
+                2 -> {
+                    var surahQuery by remember { mutableStateOf("") }
+                    var playingSurahId by remember { mutableStateOf<String?>(null) }
+                    val filteredSurahs = remember(surahQuery, script) {
+                        val q = surahQuery.trim().lowercase(Locale.ROOT)
+                        if (q.isEmpty()) {
+                            PrayerContentCatalog.surahs
+                        } else {
+                            PrayerContentCatalog.surahs.filter { s ->
+                                s.title.latin.lowercase(Locale.ROOT).contains(q) ||
+                                    s.title.cyrillic.lowercase(Locale.ROOT).contains(q) ||
+                                    s.subtitle.latin.lowercase(Locale.ROOT).contains(q) ||
+                                    s.translitLatin.lowercase(Locale.ROOT).contains(q) ||
+                                    s.meaning.latin.lowercase(Locale.ROOT).contains(q)
+                            }
+                        }
+                    }
+
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        // Gemini-1 Style Header + Search Bar
+                        item(key = "surah_search_header") {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = lText("Suralar va Duolar", "Суралар ва Дуолар").get(script),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onBackground
+                                )
+                                OutlinedTextField(
+                                    value = surahQuery,
+                                    onValueChange = { surahQuery = it },
+                                    singleLine = true,
+                                    shape = CircleShape,
+                                    placeholder = {
                                         Text(
-                                            text = surah.title.get(script),
-                                            style = MaterialTheme.typography.titleLarge
+                                            text = lText(
+                                                "Suralarni qidirish...",
+                                                "Сураларни қидириш..."
+                                            ).get(script)
                                         )
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (surahQuery.isNotEmpty()) {
+                                            IconButton(onClick = { surahQuery = "" }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Close,
+                                                    contentDescription = lText("Tozalash", "Тозалаш").get(script)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("surah_search_input")
+                                )
+                            }
+                        }
+
+                        itemsIndexed(filteredSurahs, key = { _, it -> it.id }) { index, surah ->
+                            val isPlaying = playingSurahId == surah.id
+                            Card(
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ),
+                                border = BorderStroke(
+                                    width = if (isPlaying) 1.4.dp else 0.9.dp,
+                                    color = if (isPlaying) LuxuryGold.copy(alpha = 0.72f)
+                                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    // Title + Gold Rule Badge
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "${index + 1}. ${surah.title.get(script)}",
+                                                style = MaterialTheme.typography.titleLarge,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = LuxuryGold.copy(alpha = 0.18f),
+                                                border = BorderStroke(0.7.dp, LuxuryGold.copy(alpha = 0.45f))
+                                            ) {
+                                                Text(
+                                                    text = surah.subtitle.get(script),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = LuxuryGold,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Gemini-1 Style Waveform Audio Player Strip
+                                    SurahWaveformPlayerRow(
+                                        isPlaying = isPlaying,
+                                        script = script,
+                                        onPlayClick = {
+                                            playingSurahId = surah.id
+                                            onPlayAudio(surah.ttsPrompt, surah.audioAssetId)
+                                        },
+                                        modifier = Modifier.testTag("listen_surah_${surah.id}")
+                                    )
+
+                                    // Gold-Trimmed Mushaf Arabic Panel (Amiri Classic Naskh)
+                                    Surface(
+                                        shape = RoundedCornerShape(18.dp),
+                                        color = LuxuryGold.copy(alpha = 0.11f),
+                                        border = BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.42f)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
                                         Text(
-                                            text = surah.subtitle.get(script),
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            text = surah.arabicText,
+                                            fontFamily = AmiriFontFamily,
+                                            fontSize = 24.sp,
+                                            lineHeight = 42.sp,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
-                                    FilledTonalButton(
-                                        onClick = { onPlayAudio(surah.ttsPrompt, surah.audioAssetId) },
-                                        modifier = Modifier.testTag("listen_surah_${surah.id}")
+
+                                    Text(
+                                        text = if (script == TextScript.LATIN) surah.translitLatin
+                                        else surah.translitCyrillic,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    Surface(
+                                        shape = RoundedCornerShape(14.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Icon(
-                                            Icons.Default.VolumeUp,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
+                                        Text(
+                                            text = surah.meaning.get(script),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
                                         )
-                                        Spacer(Modifier.width(6.dp))
-                                        Text(lText("Tinglash", "Тинглаш").get(script))
                                     }
                                 }
-
-                                Text(
-                                    text = surah.arabicText,
-                                    fontSize = 21.sp,
-                                    lineHeight = 32.sp,
-                                    textAlign = TextAlign.End,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-
-                                Text(
-                                    text = if (script == TextScript.LATIN) surah.translitLatin
-                                    else surah.translitCyrillic,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium
-                                )
-
-                                Text(
-                                    text = surah.meaning.get(script),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
@@ -691,6 +851,107 @@ fun LearnScreen(
                             }
                         }
                     }
+                }
+            }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SurahWaveformPlayerRow(
+    isPlaying: Boolean,
+    script: TextScript,
+    onPlayClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val barHeights = remember {
+        listOf(0.35f, 0.72f, 0.48f, 0.95f, 0.62f, 1.0f, 0.54f, 0.85f, 0.42f, 0.76f, 0.58f, 0.38f)
+    }
+    val wavePhase = if (isPlaying) {
+        val transition = rememberInfiniteTransition(label = "surah_card_wave")
+        transition.animateFloat(
+            initialValue = 0.45f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(520),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "surah_wave_phase"
+        ).value
+    } else {
+        1f
+    }
+
+    Surface(
+        onClick = onPlayClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isPlaying) LuxuryGold.copy(alpha = 0.16f)
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(
+            0.8.dp,
+            if (isPlaying) LuxuryGold.copy(alpha = 0.6f)
+            else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        ),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = LuxuryGold,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.VolumeUp,
+                        contentDescription = lText("Tinglash", "Тинглаш").get(script),
+                        tint = Color(0xFF1A1200),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (isPlaying) {
+                        lText("Qori qiroati ijro etilmoqda", "Қори қироати ижро этилмоқда").get(script)
+                    } else {
+                        lText("Oflayn Qori qiroatini tinglash", "Офлайн Қори қироатини тинглаш").get(script)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                barHeights.forEachIndexed { idx, base ->
+                    val factor = when {
+                        !isPlaying -> base * 0.72f
+                        idx % 2 == 0 -> (base * wavePhase).coerceIn(0.25f, 1f)
+                        else -> (base * (1.35f - wavePhase)).coerceIn(0.25f, 1f)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .height((22f * factor).dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isPlaying) LuxuryGold
+                                else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                            )
+                    )
                 }
             }
         }

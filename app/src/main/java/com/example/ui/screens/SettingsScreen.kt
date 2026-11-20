@@ -7,10 +7,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -28,17 +31,21 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Accessible
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Policy
@@ -47,12 +54,12 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +72,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,16 +80,28 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.data.preferences.ReminderSoundMode
 import com.example.data.remote.RemoteUzbekistanPrayerTimesService
 import com.example.domain.engine.UzbekistanCities
 import com.example.domain.model.Gender
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
+import com.example.ui.theme.DeepHeroGradientEnd
+import com.example.ui.theme.DeepHeroGradientStart
 import com.example.ui.theme.JetBrainsMonoFontFamily
+import com.example.ui.theme.LuxuryGold
 import com.example.ui.theme.PoseMatchedGreen
 import com.example.ui.viewmodel.MainUiState
 import java.text.SimpleDateFormat
@@ -106,7 +126,7 @@ fun SettingsScreen(
     onAutoBoostVolumeToggle: (Boolean) -> Unit = {},
     onAcousticChimeToggle: (Boolean) -> Unit = {},
     onOledNightModeToggle: (Boolean) -> Unit = {},
-    onReminderSoundModeChange: (com.example.data.preferences.ReminderSoundMode) -> Unit = {},
+    onReminderSoundModeChange: (ReminderSoundMode) -> Unit = {},
     onPreviewTakbirSound: () -> Unit = {},
     onSyncCalendarNow: () -> Unit = {},
     onExportBackupUri: (Uri) -> Unit = {},
@@ -143,9 +163,15 @@ fun SettingsScreen(
 
     Scaffold(
         contentWindowInsets = WindowInsets.safeDrawing,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(lText("Sozlamalar", "Созламалар").get(script)) },
+                title = {
+                    Text(
+                        text = lText("Sozlamalar", "Созламалар").get(script),
+                        fontWeight = FontWeight.Bold
+                    )
+                },
                 navigationIcon = {
                     IconButton(
                         onClick = onBack,
@@ -156,7 +182,11 @@ fun SettingsScreen(
                             contentDescription = lText("Orqaga", "Орқага").get(script)
                         )
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.surface
+                )
             )
         }
     ) { innerPadding ->
@@ -172,53 +202,68 @@ fun SettingsScreen(
                     .widthIn(max = 600.dp)
                     .align(Alignment.TopCenter)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                // Script & Gender Card
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                // GROUP 1: PERSONALIZATION
+                SettingsSectionBlock(
+                    title = lText("SHAXSIYLASHTIRISH", "ШАХСИЙЛАШТИРИШ").get(script)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = lText("Shaxsiylashtirish", "Шахсийлаштириш").get(script),
-                            style = MaterialTheme.typography.titleMedium
-                        )
-
-                        Text(
                             text = lText("Yozuv turi", "Ёзув тури").get(script),
-                            style = MaterialTheme.typography.labelLarge
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             FilterChip(
                                 selected = script == TextScript.LATIN,
                                 onClick = { onScriptChange(TextScript.LATIN) },
+                                shape = CircleShape,
                                 label = { Text("Lotin") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
                                 modifier = Modifier.testTag("settings_script_latin")
                             )
                             FilterChip(
                                 selected = script == TextScript.CYRILLIC,
                                 onClick = { onScriptChange(TextScript.CYRILLIC) },
+                                shape = CircleShape,
                                 label = { Text("Кирилл") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                ),
                                 modifier = Modifier.testTag("settings_script_cyrillic")
                             )
                         }
 
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+                        )
+
                         Text(
                             text = lText("Jins (Namoz qoidalari)", "Жинс (Намоз қоидалари)").get(script),
-                            style = MaterialTheme.typography.labelLarge
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Gender.entries.forEach { g ->
                                 FilterChip(
                                     selected = settings.gender == g,
                                     onClick = { onGenderChange(g) },
+                                    shape = CircleShape,
                                     label = { Text(g.label.get(script)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
                                     modifier = Modifier.testTag("settings_gender_${g.id}")
                                 )
                             }
@@ -226,200 +271,78 @@ fun SettingsScreen(
                     }
                 }
 
-                // Chair / Seated Mode (Accessibility for Elderly & Mobility-Impaired)
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(
-                        1.dp,
-                        if (settings.seatedPrayerMode) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                // GROUP 2: ACCESSIBILITY & APPEARANCE (Single clean grouped list)
+                SettingsSectionBlock(
+                    title = lText("QULAYLIK VA KO‘RINISH", "ҚУЛАЙЛИК ВА КЎРИНИШ").get(script)
+                ) {
+                    SettingsSwitchRow(
+                        icon = Icons.Default.Accessible,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Stulda / O‘tirib o‘qish (Imo-ishora)",
+                            "Стулда / Ўтириб ўқиш (Имо-ишора)"
+                        ).get(script),
+                        subtitle = lText(
+                            "Keksalar va bel-tizzada og‘rig‘i borlar uchun: ruku' (15°–30°), sajda (45°–60°) egilish.",
+                            "Кексалар ва бел-тиззада оғриғи борлар учун: рукуъ (15°–30°), сажда (45°–60°) эгилиш."
+                        ).get(script),
+                        checked = settings.seatedPrayerMode,
+                        onCheckedChange = onSeatedModeToggle,
+                        switchTag = "settings_seated_mode_switch"
                     )
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Accessible,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(
-                                    text = lText(
-                                        "Stulda / O‘tirib o‘qish (Imo-ishora)",
-                                        "Стулда / Ўтириб ўқиш (Имо-ишора)"
-                                    ).get(script),
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = lText(
-                                        "Keksalar va bel-tizzada og‘rig‘i borlar uchun: ruku' yengil (15°–30°), sajda chuqurroq (45°–60°) egilish orqali aniqlanadi.",
-                                        "Кексалар ва бел-тиззада оғриғи борлар учун: рукуъ енгил (15°–30°), сажда чуқурроқ (45°–60°) эгилиш орқали аниқланади."
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Switch(
-                            checked = settings.seatedPrayerMode,
-                            onCheckedChange = onSeatedModeToggle,
-                            modifier = Modifier.testTag("settings_seated_mode_switch")
-                        )
-                    }
+                    SettingsInsetDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Default.FormatSize,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Katta shrift rejimi (Keksalar uchun)",
+                            "Катта шрифт режими (Кексалар учун)"
+                        ).get(script),
+                        subtitle = lText(
+                            "Matn va tugmalarni o‘qishga qulay qilib kattalashtiradi.",
+                            "Матн ва тугмаларни ўқишга қулай қилиб катталаштиради."
+                        ).get(script),
+                        checked = settings.largeTextMode,
+                        onCheckedChange = onLargeTextModeToggle,
+                        switchTag = "settings_large_text_switch"
+                    )
+                    SettingsInsetDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Default.BatterySaver,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Tejamkor kamera rejimi",
+                            "Тежамкор камера режими"
+                        ).get(script),
+                        subtitle = lText(
+                            "Byudjet telefonlarda qizish va quvvat sarfini kamaytiradi (8 FPS).",
+                            "Бюджет телефонларда қизиш ва қувват сарфини камайтиради (8 FPS)."
+                        ).get(script),
+                        checked = settings.lowPowerCameraMode,
+                        onCheckedChange = onLowPowerCameraToggle,
+                        switchTag = "settings_low_power_camera_switch"
+                    )
+                    SettingsInsetDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Default.DarkMode,
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        title = lText(
+                            "Bomdod OLED tungi rejim",
+                            "Бомдод OLED тунги режим"
+                        ).get(script),
+                        subtitle = lText(
+                            "Soat 05:00 da qorong‘i xonada ko‘zni qamashtirmaydigan qop-qora ekran.",
+                            "Соат 05:00 да қоронғи хонада кўзни қамаштирмайдиган қоп-қора экран."
+                        ).get(script),
+                        checked = settings.oledNightMode,
+                        onCheckedChange = onOledNightModeToggle,
+                        switchTag = "settings_oled_night_mode_switch"
+                    )
                 }
 
-                // Large Text Mode (Senior Mode) + Low-Power Camera (Budget Phones)
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FormatSize,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = lText(
-                                            "Katta shrift rejimi (Keksalar uchun)",
-                                            "Катта шрифт режими (Кексалар учун)"
-                                        ).get(script),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = lText(
-                                            "Matn va tugmalarni o‘qishga qulay qilib kattalashtiradi.",
-                                            "Матн ва тугмаларни ўқишга қулай қилиб катталаштиради."
-                                        ).get(script),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Switch(
-                                checked = settings.largeTextMode,
-                                onCheckedChange = onLargeTextModeToggle,
-                                modifier = Modifier.testTag("settings_large_text_switch")
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.BatterySaver,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = lText(
-                                            "Tejamkor kamera rejimi",
-                                            "Тежамкор камера режими"
-                                        ).get(script),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = lText(
-                                            "Byudjet telefonlarda qizish va quvvat sarfini kamaytiradi (8 FPS).",
-                                            "Бюджет телефонларда қизиш ва қувват сарфини камайтиради (8 FPS)."
-                                        ).get(script),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Switch(
-                                checked = settings.lowPowerCameraMode,
-                                onCheckedChange = onLowPowerCameraToggle,
-                                modifier = Modifier.testTag("settings_low_power_camera_switch")
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DarkMode,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary
-                                )
-                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(
-                                        text = lText(
-                                            "Bomdod OLED tungi rejim",
-                                            "Бомдод OLED тунги режим"
-                                        ).get(script),
-                                        style = MaterialTheme.typography.titleMedium
-                                    )
-                                    Text(
-                                        text = lText(
-                                            "Soat 05:00 da qorong‘i xonada ko‘zni qamashtirmaydigan qop-qora ekran.",
-                                            "Соат 05:00 да қоронғи хонада кўзни қамаштирмайдиган қоп-қора экран."
-                                        ).get(script),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Switch(
-                                checked = settings.oledNightMode,
-                                onCheckedChange = onOledNightModeToggle,
-                                modifier = Modifier.testTag("settings_oled_night_mode_switch")
-                            )
-                        }
-                    }
-                }
-
-                // Prayer Reminder Sound Selector (Qori Takbir / Default / Vibrate-only)
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                // GROUP 3: REMINDER SOUND & VOICE COACH
+                SettingsSectionBlock(
+                    title = lText("ESLATMA VA OVOZLI USTOZ", "ЭСЛАТМА ВА ОВОЗЛИ УСТОЗ").get(script)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -427,25 +350,25 @@ fun SettingsScreen(
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.NotificationsActive,
-                                contentDescription = null,
+                            SettingsIconBadge(
+                                icon = Icons.Default.NotificationsActive,
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = lText(
-                                        "Namoz eslatmasi ovozi (Bomdod / 5 vaqt)",
-                                        "Намоз эслатмаси овози (Бомдод / 5 вақт)"
+                                        "Namoz eslatmasi ovozi",
+                                        "Намоз эслатмаси овози"
                                     ).get(script),
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
                                     text = lText(
-                                        "Bomdodga uyg‘onish uchun Qori Takbiri yoki oilani uyg‘otmaslik uchun faqat tebranishni tanlang.",
-                                        "Бомдодга уйғониш учун Қори Такбири ёки оилани уйғотмаслик учун фақат тебранишни танланг."
+                                        "Bomdodga uyg‘onish uchun Qori Takbiri yoki faqat tebranishni tanlang.",
+                                        "Бомдодга уйғониш учун Қори Такбири ёки фақат тебранишни танланг."
                                     ).get(script),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -457,11 +380,16 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            com.example.data.preferences.ReminderSoundMode.entries.forEach { mode ->
+                            ReminderSoundMode.entries.forEach { mode ->
                                 FilterChip(
                                     selected = settings.reminderSoundMode == mode,
                                     onClick = { onReminderSoundModeChange(mode) },
+                                    shape = CircleShape,
                                     label = { Text(mode.label.get(script)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
                                     modifier = Modifier.testTag("settings_sound_${mode.id}")
                                 )
                             }
@@ -469,6 +397,7 @@ fun SettingsScreen(
 
                         OutlinedButton(
                             onClick = onPreviewTakbirSound,
+                            shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.testTag("settings_preview_takbir_button")
                         ) {
                             Icon(
@@ -485,129 +414,101 @@ fun SettingsScreen(
                             )
                         }
                     }
-                }
 
-                // Offline Audio Coach (Bundled Qori MP3s via ExoPlayer + TTS)
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                ) {
+                    SettingsInsetDivider()
+
+                    SettingsSwitchRow(
+                        icon = Icons.Default.GraphicEq,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Oflayn Qori MP3 (ExoPlayer)",
+                            "Офлайн Қори MP3 (ExoPlayer)"
+                        ).get(script),
+                        subtitle = lText(
+                            "15 ta sura, duo va tasbeh MP3 fayllari internetsiz ijro etiladi.",
+                            "15 та сура, дуо ва тасбеҳ MP3 файллари интернетсиз ижро этилади."
+                        ).get(script),
+                        checked = settings.preferOfflineMp3,
+                        onCheckedChange = onPreferOfflineMp3Toggle,
+                        switchTag = "settings_offline_mp3_switch"
+                    )
+                    SettingsInsetDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Default.VolumeUp,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Namozda ovozni avtomatik ko‘tarish",
+                            "Намозда овозни автоматик кўтариш"
+                        ).get(script),
+                        subtitle = lText(
+                            "2 metr masofadan eshitish uchun media ovozini 85% ga ko‘taradi.",
+                            "2 метр масофадан эшитиш учун медиа овозини 85% га кўтаради."
+                        ).get(script),
+                        checked = settings.autoBoostPrayerVolume,
+                        onCheckedChange = onAutoBoostVolumeToggle,
+                        switchTag = "settings_auto_volume_switch"
+                    )
+                    SettingsInsetDivider()
+                    SettingsSwitchRow(
+                        icon = Icons.Default.NotificationsActive,
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        title = lText(
+                            "Rukn tasdig‘i tovushi (Chime)",
+                            "Рукн тасдиғи товуши (Chime)"
+                        ).get(script),
+                        subtitle = lText(
+                            "Keyingi bosqichga o‘tganini bilish uchun yengil ovozli signal.",
+                            "Кейинги босқичга ўтганини билиш учун енгил овозли сигнал."
+                        ).get(script),
+                        checked = settings.acousticChimeEnabled,
+                        onCheckedChange = onAcousticChimeToggle,
+                        switchTag = "settings_acoustic_chime_switch"
+                    )
+
+                    SettingsInsetDivider()
+
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = lText(
-                                "Oflayn Qori va Ovozli Ustoz",
-                                "Офлайн Қори ва Овозли Устоз"
-                            ).get(script),
-                            style = MaterialTheme.typography.titleMedium
-                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = lText(
-                                        "Oflayn Qori MP3 (ExoPlayer)",
-                                        "Офлайн Қори MP3 (ExoPlayer)"
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = lText(
-                                        "15 ta sura, duo va tasbeh MP3 fayllari ilova ichida saqlangan va internetsiz ijro etiladi.",
-                                        "15 та сура, дуо ва тасбеҳ MP3 файллари илова ичида сақланган ва интернетсиз ижро этилади."
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            FilledTonalButton(
+                                onClick = onTestAudio,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_test_audio_button")
+                            ) {
+                                Icon(Icons.Default.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(lText("Fotiha sinovi", "Фотиҳа синови").get(script), maxLines = 1)
                             }
-                            Switch(
-                                checked = settings.preferOfflineMp3,
-                                onCheckedChange = onPreferOfflineMp3Toggle,
-                                modifier = Modifier.testTag("settings_offline_mp3_switch")
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = lText(
-                                        "Namozda ovozni avtomatik ko‘tarish",
-                                        "Намозда овозни автоматик кўтариш"
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = lText(
-                                        "2 metr masofadan eshitish uchun media ovozini 85% ga ko‘taradi (qorong‘ida o‘chiriladi).",
-                                        "2 метр масофадан эшитиш учун медиа овозини 85% га кўтаради (қоронғида ўчирилади)."
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            OutlinedButton(
+                                onClick = {
+                                    val ttsIntent = Intent("com.android.settings.TTS_SETTINGS")
+                                    runCatching { context.startActivity(ttsIntent) }
+                                        .onFailure {
+                                            runCatching {
+                                                context.startActivity(Intent(Settings.ACTION_SETTINGS))
+                                            }
+                                        }
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_tts_settings_button")
+                            ) {
+                                Icon(Icons.Default.RecordVoiceOver, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(lText("Tizim TTS", "Тизим TTS").get(script), maxLines = 1)
                             }
-                            Switch(
-                                checked = settings.autoBoostPrayerVolume,
-                                onCheckedChange = onAutoBoostVolumeToggle,
-                                modifier = Modifier.testTag("settings_auto_volume_switch")
-                            )
                         }
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = lText(
-                                        "Rukn tasdig‘i tovushi (Chime)",
-                                        "Рукн тасдиғи товуши (Chime)"
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                                Text(
-                                    text = lText(
-                                        "Ekranga qaramasdan keyingi bosqichga o‘tganini bilish uchun yengil ovozli signal.",
-                                        "Экранга қарамасдан кейинги босқичга ўтганини билиш учун енгил овозли сигнал."
-                                    ).get(script),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Switch(
-                                checked = settings.acousticChimeEnabled,
-                                onCheckedChange = onAcousticChimeToggle,
-                                modifier = Modifier.testTag("settings_acoustic_chime_switch")
-                            )
-                        }
-
-                        FilledTonalButton(
-                            onClick = onTestAudio,
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .testTag("settings_test_audio_button")
-                        ) {
-                            Icon(Icons.Default.VolumeUp, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                lText(
-                                    "Qiroatni sinab ko‘rish (Fotiha)",
-                                    "Қироатни синаб кўриш (Фотиҳа)"
-                                ).get(script)
-                            )
-                        }
-
-                        // TTS Language Status & System Voice Helper
                         val tts = uiState.ttsReadiness
                         val ttsSummary = when {
                             tts.hasUzbekLocale -> lText(
@@ -615,76 +516,58 @@ fun SettingsScreen(
                                 "Тизим овози (TTS): Ўзбек тили тайёр"
                             )
                             tts.hasFallbackLocale -> lText(
-                                "Tizim ovozi (TTS): O‘zbekcha paket o‘rnatilmagan (yordamchi ovoz faol). Oflayn Qori MP3 ishlaydi.",
-                                "Тизим овози (TTS): Ўзбекча пакет ўрнатилмаган (ёрдамчи овоз фаол). Офлайн Қори MP3 ишлайди."
+                                "Tizim ovozi (TTS): Yordamchi ovoz faol. Oflayn Qori MP3 ishlaydi.",
+                                "Тизим овози (TTS): Ёрдамчи овоз фаол. Офлайн Қори MP3 ишлайди."
                             )
                             else -> lText(
-                                "Oflayn Qori MP3 tayyor. Ko‘rsatmalar uchun tizim TTS ovozini sozlashingiz mumkin.",
-                                "Офлайн Қори MP3 тайёр. Кўрсатмалар учун тизим TTS овозини созлашингиз мумкин."
+                                "Oflayn Qori MP3 tayyor. Qo‘shimcha ko‘rsatmalar uchun tizim TTS sozlanishi mumkin.",
+                                "Офлайн Қори MP3 тайёр. Қўшимча кўрсатмалар учун тизим TTS созланиши мумкин."
                             )
                         }.get(script)
-
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Text(
-                                    text = ttsSummary,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                OutlinedButton(
-                                    onClick = {
-                                        val ttsIntent = Intent("com.android.settings.TTS_SETTINGS")
-                                        runCatching { context.startActivity(ttsIntent) }
-                                            .onFailure {
-                                                runCatching {
-                                                    context.startActivity(Intent(Settings.ACTION_SETTINGS))
-                                                }
-                                            }
-                                    },
-                                    modifier = Modifier
-                                        .heightIn(min = 48.dp)
-                                        .testTag("settings_tts_settings_button")
-                                ) {
-                                    Icon(Icons.Default.RecordVoiceOver, contentDescription = null)
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        lText(
-                                            "Tizim ovozi sozlamalari (TTS)",
-                                            "Тизим овози созламалари (TTS)"
-                                        ).get(script)
-                                    )
-                                }
-                            }
-                        }
-
                         Text(
-                            text = "${lText("Ovoz tezligi:", "Овоз тезлиги:").get(script)} ${
-                                String.format(Locale.US, "%.2fx", settings.voiceSpeed)
-                            }",
-                            style = MaterialTheme.typography.labelLarge
+                            text = ttsSummary,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+
+                        Spacer(Modifier.height(2.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = lText("Ovoz tezligi", "Овоз тезлиги").get(script),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                text = String.format(Locale.US, "%.2fx", settings.voiceSpeed),
+                                fontFamily = JetBrainsMonoFontFamily,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         Slider(
                             value = settings.voiceSpeed,
                             onValueChange = onVoiceSpeedChange,
                             valueRange = 0.75f..1.35f
                         )
 
-                        Text(
-                            text = "${
-                                lText(
-                                    "Qorong‘i xona sezgirligi:",
-                                    "Қоронғи хона сезгирлиги:"
-                                ).get(script)
-                            } ${settings.darkRoomLuminanceThreshold.toInt()} lum",
-                            style = MaterialTheme.typography.labelLarge
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = lText("Qorong‘i xona sezgirligi", "Қоронғи хона сезгирлиги").get(script),
+                                style = MaterialTheme.typography.labelLarge
+                            )
+                            Text(
+                                text = "${settings.darkRoomLuminanceThreshold.toInt()} lum",
+                                fontFamily = JetBrainsMonoFontFamily,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                         Slider(
                             value = settings.darkRoomLuminanceThreshold,
                             onValueChange = onDarkThresholdChange,
@@ -693,23 +576,14 @@ fun SettingsScreen(
                     }
                 }
 
-                // 365-Day Calendar DB & Online Sync + City Picker
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                // GROUP 4: 365-DAY CALENDAR & BACKUP
+                SettingsSectionBlock(
+                    title = lText("TAQVIM VA ZAXIRA", "ТАҚВИМ ВА ЗАХИРА").get(script)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text(
-                            text = lText(
-                                "Hudud va 365 kunlik taqvim",
-                                "Ҳудуд ва 365 кунлик тақвим"
-                            ).get(script),
-                            style = MaterialTheme.typography.titleMedium
-                        )
                         val providerTitle = when (uiState.calendarSource) {
                             RemoteUzbekistanPrayerTimesService.PROVIDER_ISLOM_API -> "Islom.uz API"
                             RemoteUzbekistanPrayerTimesService.PROVIDER_ALADHAN -> "Aladhan API"
@@ -751,56 +625,58 @@ fun SettingsScreen(
                                 FilterChip(
                                     selected = settings.selectedCityId == city.id,
                                     onClick = { onCityChange(city.id) },
-                                    label = { Text(city.name.get(script)) }
+                                    shape = CircleShape,
+                                    label = { Text(city.name.get(script)) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                                    )
                                 )
                             }
                         }
 
-                        FilledTonalButton(
-                            onClick = onSyncCalendarNow,
-                            enabled = !uiState.isCalendarSyncing,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("settings_sync_calendar_button")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            if (uiState.isCalendarSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(Icons.Default.Sync, contentDescription = null)
+                            FilledTonalButton(
+                                onClick = onSyncCalendarNow,
+                                enabled = !uiState.isCalendarSyncing,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_sync_calendar_button")
+                            ) {
+                                if (uiState.isCalendarSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                }
+                                Spacer(Modifier.width(6.dp))
+                                Text(lText("Yangilash", "Янгилаш").get(script), maxLines = 1)
                             }
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                lText(
-                                    "O‘zbekiston vaqtlarini yangilash",
-                                    "Ўзбекистон вақтларини янгилаш"
-                                ).get(script)
-                            )
-                        }
 
-                        OutlinedButton(
-                            onClick = { showOfflineMonthSheet = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("settings_view_offline_calendar_button")
-                        ) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                lText(
-                                    "Oylik oflayn taqvimni ko‘rish",
-                                    "Ойлик офлайн тақвимни кўриш"
-                                ).get(script)
-                            )
+                            OutlinedButton(
+                                onClick = { showOfflineMonthSheet = true },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("settings_view_offline_calendar_button")
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(lText("Oylik jadval", "Ойлик жадвал").get(script), maxLines = 1)
+                            }
                         }
 
                         uiState.calendarSyncStatusMessage?.let { statusMsg ->
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = PoseMatchedGreen.copy(alpha = 0.14f),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -816,29 +692,25 @@ fun SettingsScreen(
                             }
                         }
                     }
-                }
 
-                // Offline JSON Backup & Restore (SAF - Zero Storage Permission)
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
-                ) {
+                    SettingsInsetDivider()
+
                     Column(
                         modifier = Modifier.padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
                             text = lText(
-                                "Zaxira nusxa (Saqlash va Tiklash)",
-                                "Захира нусха (Сақлаш ва Тиклаш)"
+                                "Zaxira nusxa (JSON • Saqlash va Tiklash)",
+                                "Захира нусха (JSON • Сақлаш ва Тиклаш)"
                             ).get(script),
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = lText(
-                                "Qazo namozlari, kundalik jadval va sozlamalarni telefonga JSON fayl qilib saqlang yoki yangi qurilmaga tiklang.",
-                                "Қазо намозлари, кундалик жадвал ва созламаларни телефонга JSON файл қилиб сақланг ёки янги қурилмага тикланг."
+                                "Qazo namozlari, kundalik jadval va tarixni telefonga saqlang yoki tiklang.",
+                                "Қазо намозлари, кундалик жадвал ва тарихни телефонга сақланг ёки тикланг."
                             ).get(script),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -854,12 +726,13 @@ fun SettingsScreen(
                                     val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
                                     exportBackupLauncher.launch("namoz_ustoz_ai_zaxira_$dateStr.json")
                                 },
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 48.dp)
                                     .testTag("settings_export_backup_button")
                             ) {
-                                Icon(Icons.Default.CloudUpload, contentDescription = null)
+                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(lText("Saqlash", "Сақлаш").get(script))
                             }
@@ -871,12 +744,13 @@ fun SettingsScreen(
                                         arrayOf("application/json", "text/plain", "*/*")
                                     )
                                 },
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .heightIn(min = 48.dp)
                                     .testTag("settings_import_backup_button")
                             ) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null)
+                                Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text(lText("Tiklash", "Тиклаш").get(script))
                             }
@@ -884,7 +758,7 @@ fun SettingsScreen(
 
                         uiState.backupStatusMessage?.let { msg ->
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 color = PoseMatchedGreen.copy(alpha = 0.14f),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -902,59 +776,138 @@ fun SettingsScreen(
                     }
                 }
 
-                // Runtime Permissions Center (Camera, Notifications, Exact Alarm, Battery)
-                FilledTonalButton(
-                    onClick = onOpenPermissions,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("settings_open_permissions_button")
+                // GROUP 5: PERMISSIONS, GUIDE & PRIVACY (Clean chevron action rows)
+                SettingsSectionBlock(
+                    title = lText("XAVFSIZLIK VA QO‘LLANMA", "ХАВФСИЗЛИК ВА ҚЎЛЛАНМА").get(script)
                 ) {
-                    Icon(Icons.Default.Security, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        lText(
-                            "Ruxsatlar: Kamera, Bildirishnoma va Aniq Azon",
-                            "Рухсатлар: Камера, Билдиришнома ва Аниқ Азон"
-                        ).get(script)
+                    SettingsActionRow(
+                        icon = Icons.Default.Security,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Ruxsatlar markazi",
+                            "Рухсатлар маркази"
+                        ).get(script),
+                        subtitle = lText(
+                            "Kamera, Bildirishnoma va Aniq Azon",
+                            "Камера, Билдиришнома ва Аниқ Азон"
+                        ).get(script),
+                        onClick = onOpenPermissions,
+                        tag = "settings_open_permissions_button"
                     )
-                }
-
-                // Reopen Interactive Step-by-Step Prayer Guide (Onboarding)
-                FilledTonalButton(
-                    onClick = onOpenPrayerGuide,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("settings_open_prayer_guide_button")
-                ) {
-                    Icon(Icons.Default.MenuBook, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        lText(
-                            "Namoz tartibi (Interaktiv qo‘llanma)",
-                            "Намоз тартиби (Интерактив қўлланма)"
-                        ).get(script)
+                    SettingsInsetDivider()
+                    SettingsActionRow(
+                        icon = Icons.Default.MenuBook,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = lText(
+                            "Namoz tartibi (6 qadam)",
+                            "Намоз тартиби (6 қадам)"
+                        ).get(script),
+                        subtitle = lText(
+                            "Interaktiv qo‘llanmani qayta ko‘rish",
+                            "Интерактив қўлланмани қайта кўриш"
+                        ).get(script),
+                        onClick = onOpenPrayerGuide,
+                        tag = "settings_open_prayer_guide_button"
                     )
-                }
-
-                // Privacy Policy & Fiqh Calculation Reference
-                OutlinedButton(
-                    onClick = { showPrivacyPolicyDialog = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("settings_privacy_policy_button")
-                ) {
-                    Icon(Icons.Default.Policy, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        lText(
+                    SettingsInsetDivider()
+                    SettingsActionRow(
+                        icon = Icons.Default.Policy,
+                        iconTint = MaterialTheme.colorScheme.secondary,
+                        title = lText(
                             "Maxfiylik siyosati va Fiqhiy asos",
                             "Махфийлик сиёсати ва Фиқҳий асос"
-                        ).get(script)
+                        ).get(script),
+                        subtitle = lText(
+                            "100% oflayn kamera va Hanafiy mezonlari",
+                            "100% офлайн камера ва Ҳанафий мезонлари"
+                        ).get(script),
+                        onClick = { showPrivacyPolicyDialog = true },
+                        tag = "settings_privacy_policy_button"
                     )
                 }
+
+                // Warm Islamic Closing Banner (4th-mockup touch)
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = DeepHeroGradientStart,
+                    border = BorderStroke(1.dp, LuxuryGold.copy(alpha = 0.42f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("settings_dua_banner")
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 96.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_hero_mosque_1795154346302),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .matchParentSize()
+                                .alpha(0.32f)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(
+                                    Brush.horizontalGradient(
+                                        listOf(
+                                            DeepHeroGradientStart.copy(alpha = 0.84f),
+                                            DeepHeroGradientEnd.copy(alpha = 0.72f)
+                                        )
+                                    )
+                                )
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 18.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = lText(
+                                        "Alloh namozimizni qabul qilsin!",
+                                        "Аллоҳ намозимизни қабул қилсин!"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = lText(
+                                        "Namoz Ustoz AI • 100% oflayn va maxfiy",
+                                        "Намоз Устоз AI • 100% офлайн ва махфий"
+                                    ).get(script),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color(0xFFFFE5A3)
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = LuxuryGold.copy(alpha = 0.22f),
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.Favorite,
+                                        contentDescription = null,
+                                        tint = LuxuryGold,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
             }
         }
     }
@@ -1038,7 +991,6 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Table Header
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1130,5 +1082,160 @@ fun SettingsScreen(
                 Spacer(Modifier.height(12.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsSectionBlock(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.9.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        )
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp,
+            border = BorderStroke(
+                0.8.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                content = content
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsIconBadge(
+    icon: ImageVector,
+    tint: Color
+) {
+    Surface(
+        shape = CircleShape,
+        color = tint.copy(alpha = 0.12f),
+        modifier = Modifier.size(36.dp)
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(19.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsInsetDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 64.dp, end = 16.dp),
+        thickness = 0.5.dp,
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
+    )
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    switchTag: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingsIconBadge(icon = icon, tint = iconTint)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag(switchTag)
+        )
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    tag: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 60.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag(tag),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SettingsIconBadge(icon = icon, tint = iconTint)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+        )
     }
 }

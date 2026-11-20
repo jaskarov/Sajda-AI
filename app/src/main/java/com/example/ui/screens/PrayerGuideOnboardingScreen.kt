@@ -80,6 +80,7 @@ import com.example.domain.model.PrayerPose
 import com.example.domain.model.TextScript
 import com.example.domain.model.lText
 import com.example.ui.components.PrayerPostureIllustration
+import com.example.ui.theme.AmiriFontFamily
 import com.example.ui.theme.DeepHeroGradientEnd
 import com.example.ui.theme.DeepHeroGradientStart
 import com.example.ui.theme.NightGold
@@ -894,8 +895,9 @@ private fun PrayerGuideStepPage(
                     ) {
                         Text(
                             text = step.arabicText,
-                            fontSize = 22.sp,
-                            lineHeight = 32.sp,
+                            fontFamily = AmiriFontFamily,
+                            fontSize = 25.sp,
+                            lineHeight = 38.sp,
                             textAlign = TextAlign.End,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.fillMaxWidth()
